@@ -23,7 +23,6 @@ class WhatsAppController extends Controller
 
     public function handle(Request $request)
     {
-        // Registrar driver
         DriverManager::loadDriver(\BotMan\Drivers\Web\WebDriver::class);
         $botman = app('botman');
 
@@ -31,7 +30,6 @@ class WhatsAppController extends Controller
             $bot->reply('¡Hola! Soy tu asistente de WhatsApp.');
         });
 
-        // Aquí puedes agregar más respuestas automatizadas
         $botman->listen();
     }
 }

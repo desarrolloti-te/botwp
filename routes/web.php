@@ -6,5 +6,8 @@ use App\Http\Controllers\WhatsAppController;
 Route::get('/', function () {
     return view('welcome');
 });
+Route::get('/politica-privacidad', function () {
+    return view('politicy');
+});
 Route::get('/whatsapp/webhook', [WhatsAppController::class, 'verify']);
 Route::post('/whatsapp/webhook', [WhatsAppController::class, 'handle']);
