@@ -27,7 +27,9 @@ class WhatsAppController extends Controller
         $botman = app('botman');
 
         $botman->hears('Hola', function (BotMan $bot) {
-            $bot->reply('¡Hola! Soy tu asistente de WhatsApp.');
+            $bot->reply("¡Hola! Gracias por comunicarte con nosotros ¿Con qué te puedo ayudar hoy? 
+            Ingresa un número: \n 1. Nuestros servicios \n 2. Nuestros productos \n 3.Soporte técnico. 
+            Si quieres volver a este menú, envía hola en cualquier momento.");
         });
 
         $botman->listen();
