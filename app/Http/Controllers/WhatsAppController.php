@@ -5,9 +5,14 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
+//models
+use App\Models\Chat;
+use App\Models\Message;
+
+
 class WhatsAppController extends Controller
 {
-   public function verify(Request $request)
+    public function verify(Request $request)
     {
         if (
             $request->get('hub_mode') === 'subscribe' &&
@@ -21,6 +26,8 @@ class WhatsAppController extends Controller
 
     public function receive(Request $request)
     {
+        
+
         $entry = $request->input('entry.0.changes.0.value');
         \Log::info('📩 Mensaje entrante WhatsApp', $request->all());
 
@@ -31,6 +38,27 @@ class WhatsAppController extends Controller
         $message = $entry['messages'][0];
         $from = $message['from'];
         $text = strtolower($message['text']['body'] ?? '');
+
+        $chat = Chat::firstOrCreate(
+            ['user_number' => $from],
+            ['status' => 'open']
+        );
+
+        $isHumanRequest = in_array($text, ['asesor', 'humano', 'agente']);
+
+        Message::create([
+            'chat_id' => $chat->id,
+            'message' => $text,
+            'type' => 'user',
+            'requires_human' => $isHumanRequest
+        ]);
+
+        if ($isHumanRequest) {
+            $this->sendMessage($from,
+                "👨‍💻 Un asesor humano fue notificado.\nEn breve te atenderemos."
+            );
+            return response()->json(['status' => 'ok']);
+        }
 
         if($text === '/agente' && in_array($from, config('services.whatsapp.agent_numbers'))) {
             // Obtener todos los mensajes pendientes
@@ -52,34 +80,45 @@ class WhatsAppController extends Controller
             return response()->json(['status'=>'ok']);
         }
 
-        if(str_starts_with($text, '/responder') && in_array($from, config('services.whatsapp.agent_numbers'))) {
-            // Formato: /responder 123 Hola, tu consulta está resuelta
+        if (
+            str_starts_with($text, '/responder') &&
+            in_array($from, config('services.whatsapp.agent_numbers'))
+        ) {
+
             preg_match('/^\/responder (\d+) (.+)$/s', $text, $matches);
-            if(count($matches) !== 3){
-                $this->sendMessage($from, "Formato incorrecto. Usa: /responder <ID> <mensaje>");
+
+            if (count($matches) !== 3) {
+                $this->sendMessage($from, "❌ Usa: /responder <ID> <mensaje>");
                 return response()->json(['status'=>'ok']);
             }
 
-            [$full, $msgId, $replyText] = $matches;
+            [, $msgId, $replyText] = $matches;
 
-            $msg = \App\Models\Message::with('chat')->find($msgId);
-            if(!$msg){
-                $this->sendMessage($from, "Mensaje no encontrado.");
+            $msg = Message::with('chat')->find($msgId);
+
+            if (!$msg) {
+                $this->sendMessage($from, "❌ Mensaje no encontrado.");
                 return response()->json(['status'=>'ok']);
             }
 
             // Guardar respuesta del agente
-            \App\Models\Message::create([
+            Message::create([
                 'chat_id' => $msg->chat->id,
                 'message' => $replyText,
                 'type' => 'agent',
-                'handled' => true,
+                'handled' => true
             ]);
 
-            // Enviar mensaje al usuario (dentro de la ventana de 24h)
+            // Marcar mensaje original como atendido
+            $msg->update(['handled' => true]);
+
+            // Enviar mensaje al usuario
             $this->sendMessage($msg->chat->user_number, $replyText);
 
-            $this->sendMessage($from, "✅ Mensaje enviado al usuario {$msg->chat->user_number}");
+            $this->sendMessage($from,
+                "✅ Respuesta enviada al usuario {$msg->chat->user_number}"
+            );
+
             return response()->json(['status'=>'ok']);
         }
 
@@ -90,7 +129,7 @@ class WhatsAppController extends Controller
         //     default => $this->sendMessage($from, 'No entendí tu mensaje 😅. Escribe *hola* o *info*.'),
         // };
 
-         $item = $this->findResponseInCatalog($text);
+        $item = $this->findResponseInCatalog($text);
 
         switch ($item['type']) {
             case 'text':
@@ -127,6 +166,7 @@ class WhatsAppController extends Controller
 
     private function findResponseInCatalog(string $input): array
     {
+        
         $catalog = [
             // GREETING
             [
@@ -288,11 +328,6 @@ class WhatsAppController extends Controller
                 'type' => 'text',
                 'response' => "📞 Puedes llamarnos al número 99. Nuestro horario es de 9:00 AM a 6:00 PM. ¿Prefieres que te llamemos nosotros?"
             ],
-            [
-                'keys' => ['humano', 'persona', 'asesor', 'agente'],
-                'type' => 'text',
-                'response' => "Entendido, te comunico con un especialista humano. 👨‍💻\nUn momento por favor..."
-            ],
 
             [
                 'keys' => ['foto', 'imagen', 'producto'],
@@ -325,7 +360,10 @@ class WhatsAppController extends Controller
         }
 
         // Respuesta por defecto (Default Fallback)
-        return "👋 No estoy seguro de cómo responder a eso, pero quiero ayudarte.\n\nPrueba escribiendo:\n- *'Rediseño'* para blindaje fiscal.\n- *'Nube'* para escritorios virtuales.\n- *'Asesor'* para hablar con un humano.";
+        return [
+            'type' => 'text',
+            'response' => "👋 No estoy seguro de cómo responder a eso, pero quiero ayudarte.\n\nPrueba escribiendo:\n- *'Rediseño'* para blindaje fiscal.\n- *'Nube'* para escritorios virtuales.\n- *'Asesor'* para hablar con un humano."
+        ];
     }
 
     private function sendDocument(string $to, string $docUrl, string $filename = null): void

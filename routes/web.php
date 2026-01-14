@@ -13,3 +13,12 @@ Route::get('/politica-privacidad', function () {
 Route::get('/webhook', [WhatsAppController::class, 'verify']);
 Route::post('/webhook', [WhatsAppController::class, 'receive'])
     ->withoutMiddleware([VerifyCsrfToken::class]);
+
+Route::get('/panel/agentes', function () {
+return \App\Models\Message::where('requires_human', true)
+    ->where('handled', false)
+    ->with('chat')
+    ->latest()
+    ->get();
+});
+
