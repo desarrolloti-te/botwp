@@ -1,0 +1,20 @@
+Identificador User Linda 'EAAKYlBPp22MBQVG0ORsJ5GZBmqXZBxftRwAiSTYa3ZB3oPgaqQSuWxOH7IScPmX7BroV5YImpc0z8LJl8YZBPlU375zRCM4PnSYz4tXDZAJd1ywZClOkFLXOii8D3ccVIdLgqvUnRlSAWgGkMi06tZCMPkH1mFtV7axhQAow4ZCe2mgCkhfxYNDrnCObokkKzAZDZD'
+phone number id 909859852215632
+Identificador de la aplicación: 730711710096227
+Identificador de la cuenta de WhatsApp Business: 906527025382036
+Identificador del porfolio empresarial: 2373931669721089
+
+EAAKYlBPp22MBQeER0tvlAyZBqls02T92botSQ57aWZC85RXqve266tY7O2BxlFPNdkwyD3J00D1paqOtrKdTPdGYHIxF9IT7xR7ZAfbcRZA114tcZApUTZCI3GRxTKS6S3wqpKkOZAHkprhL5QP6pdwk5auZB5b1j53pUvL6RXHEUSbhYVqLKly76AG7jI2f9L25
+
+Tecnología Empresarial
+Identificador: 870733522376093
+870733522376093
+Propiedad de: Tecnologia Empresarial  (esto salio de cuentas de WhatsApp)
+
+business_id=2373931669721089 (lo obtuve de la url del portafolio empresarial https://business.facebook.com/latest/settings/business_info?business_id=2373931669721089)
+
+
+"id": "909859852215632",
+"display_phone_number": "+52 1 993 501 0276"
+
+EAAKYlBPp22MBQaRsn4Q5XTUA9iiK56SmXugEwIhV8IHTDkabpGYfImqL31Y3VwZCml2nmEZBZCOyceeZAx6gsRWPjCb0QbyRsAGxaArf0SM8AQfsNi33thsJaKBVpU3ZCbuZAtpXEZCsxgeZBYBvnZAmjH62mTxg9CYmZBMAXJZChjhixjsfbEQ36MtH0qf3MZBetgZDZD
