@@ -32,6 +32,58 @@ class WhatsAppController extends Controller
         $from = $message['from'];
         $text = strtolower($message['text']['body'] ?? '');
 
+        if($text === '/agente' && in_array($from, config('services.whatsapp.agent_numbers'))) {
+            // Obtener todos los mensajes pendientes
+            $pending = \App\Models\Message::where('requires_human', true)
+                ->where('handled', false)
+                ->with('chat')
+                ->get();
+
+            $response = "📋 Consultas pendientes:\n\n";
+
+            foreach($pending as $msg){
+                $response .= "ID: {$msg->id}\n";
+                $response .= "Usuario: {$msg->chat->user_number}\n";
+                $response .= "Mensaje: {$msg->message}\n\n";
+            }
+
+            $this->sendMessage($from, $response ?: "No hay consultas pendientes.");
+
+            return response()->json(['status'=>'ok']);
+        }
+
+        if(str_starts_with($text, '/responder') && in_array($from, config('services.whatsapp.agent_numbers'))) {
+            // Formato: /responder 123 Hola, tu consulta está resuelta
+            preg_match('/^\/responder (\d+) (.+)$/s', $text, $matches);
+            if(count($matches) !== 3){
+                $this->sendMessage($from, "Formato incorrecto. Usa: /responder <ID> <mensaje>");
+                return response()->json(['status'=>'ok']);
+            }
+
+            [$full, $msgId, $replyText] = $matches;
+
+            $msg = \App\Models\Message::with('chat')->find($msgId);
+            if(!$msg){
+                $this->sendMessage($from, "Mensaje no encontrado.");
+                return response()->json(['status'=>'ok']);
+            }
+
+            // Guardar respuesta del agente
+            \App\Models\Message::create([
+                'chat_id' => $msg->chat->id,
+                'message' => $replyText,
+                'type' => 'agent',
+                'handled' => true,
+            ]);
+
+            // Enviar mensaje al usuario (dentro de la ventana de 24h)
+            $this->sendMessage($msg->chat->user_number, $replyText);
+
+            $this->sendMessage($from, "✅ Mensaje enviado al usuario {$msg->chat->user_number}");
+            return response()->json(['status'=>'ok']);
+        }
+
+
         // match ($text) {
         //     'hola' => $this->sendMessage($from, '¡Hola! 👋 ¿En qué puedo ayudarte?'),
         //     'info' => $this->sendMessage($from, 'Somos una empresa que ofrece servicios.'),
@@ -77,25 +129,170 @@ class WhatsAppController extends Controller
     {
         $catalog = [
             // GREETING
-            ['keys' => ['hola', 'inicio', 'buenos', 'menu'], 'type' => 'text', 'response' => "¡Hola! 👋 Bienvenido a *Tecnología Empresarial*.\nSomos Arquitectos de Evidencia Operativa.\n\n¿En qué podemos ayudarte?\n1️⃣ *Rediseño 360°* (Blindaje Fiscal)\n2️⃣ *CONTPAQi* (Nube y Licencias)\n3️⃣ *Capacitación* (Cursos)\n4️⃣ *Soporte Técnico*\n\n_Escribe el tema de tu interés._"],
-            ['keys' => ['gracias', 'adios', 'bye'], 'type' => 'text', 'response' => "¡Gracias a ti! Estamos para blindar tu operación. 🛡️"],
-            
-            // REDISEÑO & REFORMA (Prioridad Alta)
-            ['keys' => ['rediseño', 'rediseno', 'blindaje'], 'type' => 'text', 'response' => "🛡️ Nuestro *Rediseño 360°* estructura tus procesos para garantizar la *Materialidad* ante el SAT. ¿Te gustaría agendar un diagnóstico?"],
-            ['keys' => ['reforma', '2026', 'fiscal', 'sat'], 'type' => 'text', 'response' => "⚠️ *Alerta 2026:* La fiscalización será inteligente. Te ayudamos a generar la evidencia operativa para evitar multas. Escribe *'Diagnóstico'* para empezar."],
-            ['keys' => ['materialidad', 'razon', 'evidencia'], 'type' => 'text', 'response' => "La *Materialidad* es clave. Alineamos tu operación para que cada movimiento genere evidencia automática. ¿Quieres saber cómo?"],
+            [
+                'keys' => ['hola', 'inicio', 'buenos', 'buenas', 'menu', 'empezar'],
+                'type' => 'text',
+                'response' => "¡Hola! 👋 Bienvenido a *Tecnología Empresarial*.\nSomos Arquitectos de Evidencia Operativa.\n\n¿En qué podemos ayudarte hoy?\n1️⃣ *Rediseño 360°* (Blindaje Fiscal)\n2️⃣ *CONTPAQi* (Nube y Licencias)\n3️⃣ *Capacitación* (Cursos STPS)\n4️⃣ *Soporte Técnico*\n\n_Escribe el número o el tema que te interese._"
+            ],
+            [
+                'keys' => ['gracias', 'adios', 'bye', 'hasta luego'],
+                'type' => 'text',
+                'response' => "¡Gracias a ti! Estamos para blindar tu operación. Si necesitas algo más, aquí seguiremos. 🛡️"
+            ],
+            [
+                'keys' => ['ubicacion', 'direccion', 'donde estan', 'oficina'],
+                'type' => 'text',
+                'response' => "📍 Nos encontramos listos para atenderte. Si requieres una visita presencial o consultoría en sitio, por favor escribe *'Cita'* para coordinar con un asesor."
+            ],
 
-            // CONTPAQi & NUBE
-            ['keys' => ['nube', 'escritorio', 'virtual'], 'type' => 'text', 'response' => "☁️ *¡Lleva tu oficina a cualquier lugar!* Olvídate de servidores físicos y fallas de luz. Tu info segura y respaldada. ¿Quieres ver paquetes?"],
-            ['keys' => ['contpaqi', 'sistema', 'licencia'], 'type' => 'text', 'response' => "Somos *Socios Máster* con 30 años de experiencia. 🏅 Implementamos y configuramos toda la suite. ¿Buscas licencia nueva o renovación?"],
-            ['keys' => ['soporte', 'error', 'falla', 'ayuda'], 'type' => 'text', 'response' => "🛠️ Entendemos la urgencia. Por favor describe tu problema técnico o envía foto del error. Un ingeniero te atenderá."],
-            
-            // CAPACITACIÓN
-            ['keys' => ['curso', 'capacitacion', 'stps', 'aprender'], 'type' => 'text', 'response' => "🎓 El software no comete errores, las personas sí. Ofrecemos capacitación certificada STPS. ¿Te interesa el catálogo?"],
+            // --- GRUPO 2: REDISEÑO Y BLINDAJE ---
+            [
+                'keys' => ['rediseño', 'rediseno', 'blindaje', 'reingenieria'],
+                'type' => 'text',
+                'response' => "🛡️ Nuestro *Rediseño 360°* no es solo software. Reestructuramos tus procesos administrativos para garantizar la *Materialidad* y *Razón de Negocios* que exige el SAT.\n\n¿Te gustaría agendar un diagnóstico de vulnerabilidad?"
+            ],
+            [
+                'keys' => ['reforma', '2026', 'fiscal', 'sat', 'hacienda'],
+                'type' => 'text',
+                'response' => "⚠️ *Alerta 2026:* La fiscalización será inteligente. Lo que no está documentado digitalmente, no existe.\nTe ayudamos a generar la evidencia operativa necesaria para evitar multas. Escribe *'Diagnóstico'* para empezar."
+            ],
+            [
+                'keys' => ['materialidad', 'razon de negocio', 'evidencia'],
+                'type' => 'text',
+                'response' => "La *Materialidad* es la clave para deducir impuestos hoy. Nosotros alineamos tu operación (compras, ventas, inventarios) para que cada movimiento genere su evidencia automática. ¿Quieres saber cómo?"
+            ],
+            [
+                'keys' => ['auditoria', 'revision', 'multa', 'miedo', 'sancion'],
+                'type' => 'text',
+                'response' => "No esperes a la notificación. 🛑 Nuestro servicio preventivo detecta inconsistencias antes que la autoridad. Actuamos como un escudo fiscal mediante tecnología y procesos."
+            ],
 
-            // VENTAS
-            ['keys' => ['precio', 'costo', 'cotizacion', 'cuanto'], 'type' => 'text', 'response' => "Cada empresa es única. Para darte un precio justo, necesitamos un diagnóstico rápido. ¿Te gustaría hablar con un asesor?"],
-            ['keys' => ['humano', 'asesor', 'persona'], 'type' => 'text', 'response' => "Entendido, transfiriendo con un especialista humano... 👨‍💻"],
+            // --- GRUPO 3: CONTPAQI Y NUBE ---
+            [
+                'keys' => ['contpaqi', 'sistema', 'programa', 'software'],
+                'type' => 'text',
+                'response' => "Somos *Socios Máster* con 30 años de experiencia. 🏅 Implementamos, configuramos y damos soporte a toda la suite CONTPAQi.\n¿Buscas una licencia nueva o renovar?"
+            ],
+            [
+                'keys' => ['nube', 'escritorio', 'virtual', 'remoto', 'vdi'],
+                'type' => 'text',
+                'response' => "☁️ *¡Lleva tu oficina a cualquier lugar!* Con nuestros Escritorios Virtuales olvídate de servidores físicos, fallas de luz y mantenimientos. Tu información segura y respaldada diariamente. ¿Te interesa ver los paquetes?"
+            ],
+            [
+                'keys' => ['contabilidad', 'contable'],
+                'type' => 'text',
+                'response' => "*CONTPAQi Contabilidad* es el líder fiscal. Nosotros no solo lo instalamos, te enseñamos a usarlo para generar reportes financieros reales, no solo para cumplir. 📊"
+            ],
+            [
+                'keys' => ['nominas', 'nomina', 'empleados'],
+                'type' => 'text',
+                'response' => "Gestiona tu capital humano sin errores. *CONTPAQi Nóminas* cumple con todas las leyes laborales vigentes. ¿Necesitas ayuda con timbrado o cálculo?"
+            ],
+            [
+                'keys' => ['comercial', 'facturacion', 'factura', 'inventario'],
+                'type' => 'text',
+                'response' => "Controla inventarios, cuentas por cobrar y facturación al día con *CONTPAQi Comercial*. Ideal para integrar tu operación administrativa. 📦"
+            ],
+            [
+                'keys' => ['bancos', 'tesoreria', 'flujo'],
+                'type' => 'text',
+                'response' => "Conecta tus bancos con tu contabilidad automáticamente. Evita la talacha manual y ten tu flujo de efectivo al día con *CONTPAQi Bancos*. 💸"
+            ],
+
+            // --- GRUPO 4: CAPACITACIÓN ---
+            [
+                'keys' => ['capacitacion', 'curso', 'aprender', 'enseñar', 'taller'],
+                'type' => 'text',
+                'response' => "🎓 El software no comete errores, las personas sí. Ofrecemos capacitación para convertir a tu equipo en expertos operativos. ¿Buscas cursos para Contabilidad, Nóminas o Administración?"
+            ],
+            [
+                'keys' => ['stps', 'certificado', 'constancia', 'diploma'],
+                'type' => 'text',
+                'response' => "Nuestros cursos tienen valor curricular y registro ante la *STPS*. Capacitación formal para profesionalizar a tu empresa y cumplir con la normativa laboral."
+            ],
+
+            // --- GRUPO 5: SOPORTE TÉCNICO ---
+            [
+                'keys' => ['soporte', 'ayuda', 'tecnico', 'fallando', 'apoyo'],
+                'type' => 'text',
+                'response' => "🛠️ Entendemos la urgencia. Para soporte técnico inmediato, por favor describe tu problema o envía una foto del error. Un ingeniero te atenderá en breve."
+            ],
+            [
+                'keys' => ['error', 'no abre', 'lento', 'mensaje'],
+                'type' => 'text',
+                'response' => "Detectamos que tienes un problema técnico. ¿Es en servidor físico o en la Nube? Escribe *'Físico'* o *'Nube'* para orientarte mejor."
+            ],
+            [
+                'keys' => ['actualizacion', 'version', 'actualizar'],
+                'type' => 'text',
+                'response' => "Mantenerse actualizado es obligatorio por el SAT. ¿Deseas cotizar la actualización a la última versión de tu sistema?"
+            ],
+            [
+                'keys' => ['migracion', 'cambio', 'mover'],
+                'type' => 'text',
+                'response' => "¿Quieres mover tu información a un nuevo servidor o a la Nube? Somos expertos en migraciones sin pérdida de datos. 💾"
+            ],
+
+            // --- GRUPO 6: VENTAS Y CIERRE ---
+            [
+                'keys' => ['precio', 'costo', 'cuanto cuesta', 'cotizacion', 'valor'],
+                'type' => 'text',
+                'response' => "Cada empresa es única. Para darte un precio justo, necesitamos saber el número de usuarios y el tipo de servicio.\n\n¿Te gustaría hablar con un asesor comercial ahora?"
+            ],
+            [
+                'keys' => ['comprar', 'adquirir', 'contratar', 'quiero'],
+                'type' => 'text',
+                'response' => "¡Excelente decisión! 🎉 Estás a un paso de blindar tu empresa. Por favor compártenos tu *Nombre* y *Correo* para enviarte la propuesta formal."
+            ],
+            [
+                'keys' => ['cita', 'reunion', 'agendar', 'visita'],
+                'type' => 'text',
+                'response' => "🗓️ Claro, agendemos una sesión para analizar tus necesidades. ¿Prefieres cita presencial o videollamada?"
+            ],
+            [
+                'keys' => ['diagnostico', 'analisis', 'evaluacion'],
+                'type' => 'text',
+                'response' => "Nuestro *Diagnóstico Operativo* revela tus riesgos fiscales actuales. Es el primer paso hacia el Rediseño. Escribe *'Si'* para coordinarlo."
+            ],
+
+            // --- GRUPO 7: SECTORES ---
+            [
+                'keys' => ['petrolero', 'energia', 'gas', 'petroleo'],
+                'type' => 'text',
+                'response' => "Tenemos amplia experiencia en el sector *Petrolero*. Sabemos manejar la complejidad de tus volúmenes de operación y requisitos fiscales específicos. 🛢️"
+            ],
+            [
+                'keys' => ['construccion', 'obra', 'constructor'],
+                'type' => 'text',
+                'response' => "El sector *Construcción* requiere controles de obra precisos. Te ayudamos a integrar tus presupuestos con tu contabilidad para evitar desvíos. 🏗️"
+            ],
+            [
+                'keys' => ['administrativo', 'servicios', 'despacho'],
+                'type' => 'text',
+                'response' => "Optimizamos empresas de *Servicios* para que la facturación y cobranza sean automáticas. Recupera tu tiempo y enfócate en tus clientes. ⏱️"
+            ],
+
+            // --- GRUPO 8: INFO EMPRESA ---
+            [
+                'keys' => ['quien eres', 'que hacen', 'nosotros', 'empresa'],
+                'type' => 'text',
+                'response' => "Somos *Tecnología Empresarial*. No somos simples distribuidores; somos consultores con 30 años de experiencia liderados por la L.C.P. Verónica De León. Organizamos tu negocio."
+            ],
+            [
+                'keys' => ['veronica', 'dueña', 'fundadora', 'lcp'],
+                'type' => 'text',
+                'response' => "La *L.C.P. Verónica De León* es nuestra socia fundadora, especialista fiscal y creadora de metodologías de cálculo automático. Estás en manos expertas."
+            ],
+            [
+                'keys' => ['telefono', 'llamar', 'celular', 'numero'],
+                'type' => 'text',
+                'response' => "📞 Puedes llamarnos al número 99. Nuestro horario es de 9:00 AM a 6:00 PM. ¿Prefieres que te llamemos nosotros?"
+            ],
+            [
+                'keys' => ['humano', 'persona', 'asesor', 'agente'],
+                'type' => 'text',
+                'response' => "Entendido, te comunico con un especialista humano. 👨‍💻\nUn momento por favor..."
+            ],
 
             [
                 'keys' => ['foto', 'imagen', 'producto'],
