@@ -39,6 +39,9 @@ return [
         'phone_id' => env('WHATSAPP_PHONE_ID'),
         'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
         'url' => env('WHATSAPP_API_URL', 'https://graph.facebook.com/v24.0'),
+        'agent_numbers' => [
+        '5219617116072',
+        ],
     ],
 
 ];
