@@ -22,6 +22,7 @@ class WhatsAppController extends Controller
     public function receive(Request $request)
     {
         $entry = $request->input('entry.0.changes.0.value');
+        \Log::info('📩 Mensaje entrante WhatsApp', $request->all());
 
         if (!$entry || empty($entry['messages'])) {
             return response()->json(['status' => 'ok']);
