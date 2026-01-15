@@ -1,5 +1,28 @@
 @extends('layouts.app')
 
+@section('styles')
+<style>
+.chat-card {
+    cursor:pointer;
+    transition:.15s;
+}
+.chat-card:hover {
+    background:#f1f5f9;
+}
+.chat-user {
+    font-weight:600;
+}
+.chat-preview {
+    font-size:13px;
+    color:#6c757d;
+}
+.chat-time {
+    font-size:11px;
+    color:#999;
+}
+</style>
+@endsection
+
 @section('content')
 <h4 class="mb-3">📲 Panel de Chats WhatsApp</h4>
 
@@ -28,18 +51,26 @@ function renderChats(container, chats, highlight = false) {
 
     chats.forEach(chat => {
         let msg = chat.messages[0]?.message ?? 'Sin mensajes';
+        let time = chat.messages[0]?.created_at ?? '';
+        let url = `/agent/chats/${chat.id}`;
+
         html += `
-            <div class="card mb-2 ${highlight ? 'border-danger' : ''}">
-            <a href="{{ route('agent.chats.show', $chat) }}" class="text-decoration-none">
-                <div class="card-body p-2">
-                    <strong>${chat.user_number}</strong><br>
-                    <small class="text-muted">${msg}</small>
+            <a href="${url}" class="text-decoration-none text-dark">
+                <div class="card mb-2 chat-card ${highlight ? 'border-danger' : ''}">
+                    <div class="card-body p-2">
+                        <div class="d-flex justify-content-between">
+                            <span class="chat-user">${chat.user_number}</span>
+                            <span class="chat-time">${time.substring(11,16)}</span>
+                        </div>
+                        <div class="chat-preview">${msg}</div>
+                    </div>
                 </div>
-            </div>
+            </a>
         `;
     });
 
-    document.getElementById(container).innerHTML = html || '<small class="text-muted">Sin registros</small>';
+    document.getElementById(container).innerHTML =
+        html || '<small class="text-muted">Sin registros</small>';
 }
 
 function loadChats() {
