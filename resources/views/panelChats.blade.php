@@ -30,6 +30,7 @@ function renderChats(container, chats, highlight = false) {
         let msg = chat.messages[0]?.message ?? 'Sin mensajes';
         html += `
             <div class="card mb-2 ${highlight ? 'border-danger' : ''}">
+            <a href="{{ route('agent.chats.show', $chat) }}" class="text-decoration-none">
                 <div class="card-body p-2">
                     <strong>${chat.user_number}</strong><br>
                     <small class="text-muted">${msg}</small>

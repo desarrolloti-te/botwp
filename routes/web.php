@@ -28,5 +28,11 @@ Route::prefix('agent')->name('agent.')->group(function () {
 
     Route::get('/chats/data', [ChatPanelController::class, 'data'])
         ->name('chats.data');
+
+    Route::get('/chats/{chat}', [ChatPanelController::class, 'show'])
+        ->name('chats.show');
+
+    Route::post('/chats/{chat}/send', [ChatPanelController::class, 'send'])
+        ->name('chats.send');
 });
 
