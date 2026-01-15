@@ -22,7 +22,11 @@ Route::post('/webhook', [WhatsAppController::class, 'receive'])
 //     ->latest()
 //     ->get();
 // });
-Route::prefix('panel')->group(function () {
-    Route::get('/chats', [ChatPanelController::class, 'index']);
+Route::prefix('agent')->name('agent.')->group(function () {
+    Route::get('/chats', [ChatPanelController::class, 'index'])
+        ->name('chats.index');
+
+    Route::get('/chats/data', [ChatPanelController::class, 'data'])
+        ->name('chats.data');
 });
 
