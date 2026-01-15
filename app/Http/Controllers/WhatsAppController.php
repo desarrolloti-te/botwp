@@ -24,132 +24,274 @@ class WhatsAppController extends Controller
         return response('Unauthorized', 403);
     }
 
-    public function receive(Request $request)
-    {
+    // public function receive(Request $request)
+    // {
         
 
-        $entry = $request->input('entry.0.changes.0.value');
-        \Log::info('📩 Mensaje entrante WhatsApp', $request->all());
+    //     $entry = $request->input('entry.0.changes.0.value');
+    //     \Log::info('📩 Mensaje entrante WhatsApp', $request->all());
 
-        if (!$entry || empty($entry['messages'])) {
-            return response()->json(['status' => 'ok']);
-        }
+    //     if (!$entry || empty($entry['messages'])) {
+    //         return response()->json(['status' => 'ok']);
+    //     }
 
-        $message = $entry['messages'][0];
-        $from = $message['from'];
-        $text = strtolower($message['text']['body'] ?? '');
+    //     $message = $entry['messages'][0];
+    //     $from = $message['from'];
+    //     $text = strtolower($message['text']['body'] ?? '');
 
-        $chat = Chat::firstOrCreate(
-            ['user_number' => $from],
-            ['status' => 'open']
-        );
+    //     $chat = Chat::firstOrCreate(
+    //         ['user_number' => $from],
+    //         ['status' => 'open']
+    //     );
 
-        $isHumanRequest = in_array($text, ['asesor', 'humano', 'agente']);
+    //     $isHumanRequest = in_array($text, ['asesor', 'humano', 'agente']);
 
+    //     Message::create([
+    //         'chat_id' => $chat->id,
+    //         'message' => $text,
+    //         'type' => 'user',
+    //         'requires_human' => $isHumanRequest
+    //     ]);
+
+    //     if ($isHumanRequest) {
+    //         $this->sendMessage($from,
+    //             "👨‍💻 Un asesor humano fue notificado.\nEn breve te atenderemos."
+    //         );
+    //         return response()->json(['status' => 'ok']);
+    //     }
+
+    //     if($text === '/agente' && in_array($from, config('services.whatsapp.agent_numbers'))) {
+    //         // Obtener todos los mensajes pendientes
+    //         $pending = \App\Models\Message::where('requires_human', true)
+    //             ->where('handled', false)
+    //             ->with('chat')
+    //             ->get();
+
+    //         $response = "📋 Consultas pendientes:\n\n";
+
+    //         foreach($pending as $msg){
+    //             $response .= "ID: {$msg->id}\n";
+    //             $response .= "Usuario: {$msg->chat->user_number}\n";
+    //             $response .= "Mensaje: {$msg->message}\n\n";
+    //         }
+
+    //         $this->sendMessage($from, $response ?: "No hay consultas pendientes.");
+
+    //         return response()->json(['status'=>'ok']);
+    //     }
+
+    //     if (
+    //         str_starts_with($text, '/responder') &&
+    //         in_array($from, config('services.whatsapp.agent_numbers'))
+    //     ) {
+
+    //         preg_match('/^\/responder (\d+) (.+)$/s', $text, $matches);
+
+    //         if (count($matches) !== 3) {
+    //             $this->sendMessage($from, "❌ Usa: /responder <ID> <mensaje>");
+    //             return response()->json(['status'=>'ok']);
+    //         }
+
+    //         [, $msgId, $replyText] = $matches;
+
+    //         $msg = Message::with('chat')->find($msgId);
+
+    //         if (!$msg) {
+    //             $this->sendMessage($from, "❌ Mensaje no encontrado.");
+    //             return response()->json(['status'=>'ok']);
+    //         }
+
+    //         // Guardar respuesta del agente
+    //         Message::create([
+    //             'chat_id' => $msg->chat->id,
+    //             'message' => $replyText,
+    //             'type' => 'agent',
+    //             'handled' => true
+    //         ]);
+
+    //         // Marcar mensaje original como atendido
+    //         $msg->update(['handled' => true]);
+
+    //         // Enviar mensaje al usuario
+    //         $this->sendMessage($msg->chat->user_number, $replyText);
+
+    //         $this->sendMessage($from,
+    //             "✅ Respuesta enviada al usuario {$msg->chat->user_number}"
+    //         );
+
+    //         return response()->json(['status'=>'ok']);
+    //     }
+
+
+    //     // match ($text) {
+    //     //     'hola' => $this->sendMessage($from, '¡Hola! 👋 ¿En qué puedo ayudarte?'),
+    //     //     'info' => $this->sendMessage($from, 'Somos una empresa que ofrece servicios.'),
+    //     //     default => $this->sendMessage($from, 'No entendí tu mensaje 😅. Escribe *hola* o *info*.'),
+    //     // };
+
+    //     $item = $this->findResponseInCatalog($text);
+
+    //     switch ($item['type']) {
+    //         case 'text':
+    //             $this->sendMessage($from, $item['response']);
+    //             break;
+    //         case 'image':
+    //             $this->sendImage($from, $item['url'], $item['caption'] ?? null);
+    //             break;
+    //         case 'video':
+    //             $this->sendVideo($from, $item['url'], $item['caption'] ?? null);
+    //             break;
+    //         case 'document':
+    //             $this->sendDocument($from, $item['url'], $item['filename'] ?? null);
+    //             break;
+    //         default:
+    //             $this->sendMessage($from, "👋 No entendí tu mensaje.");
+    //     }
+
+    //     return response()->json(['status' => 'ok']);
+    // }
+
+    public function receive(Request $request)
+{
+    $entry = $request->input('entry.0.changes.0.value');
+    \Log::info('📩 Mensaje entrante WhatsApp', $request->all());
+
+    if (!$entry || empty($entry['messages'])) {
+        return response()->json(['status' => 'ok']);
+    }
+
+    $message = $entry['messages'][0];
+    $from = $message['from'];
+    $text = strtolower(trim($message['text']['body'] ?? ''));
+
+    // 🔎 Detectar si es agente
+    $isAgent = in_array($from, config('services.whatsapp.agent_numbers'));
+
+    // 🧠 Detectar comando interno
+    $isInternalCommand = str_starts_with($text, '/');
+
+    // 🧑‍💻 Detectar solicitud de humano
+    $isHumanRequest = in_array($text, ['asesor', 'humano', 'agente']);
+
+    // 🧾 Obtener o crear chat
+    $chat = Chat::firstOrCreate(
+        ['user_number' => $from],
+        ['status' => 'open']
+    );
+
+    /**
+     * 🚫 NO guardar comandos internos
+     */
+    if (!$isInternalCommand && !$isAgent) {
         Message::create([
             'chat_id' => $chat->id,
             'message' => $text,
             'type' => 'user',
             'requires_human' => $isHumanRequest
         ]);
+    }
 
-        if ($isHumanRequest) {
-            $this->sendMessage($from,
-                "👨‍💻 Un asesor humano fue notificado.\nEn breve te atenderemos."
-            );
-            return response()->json(['status' => 'ok']);
-        }
+    /**
+     * 🧑‍💻 Usuario pide humano
+     */
+    if ($isHumanRequest && !$isAgent) {
+        $chat->update(['status' => 'human']);
 
-        if($text === '/agente' && in_array($from, config('services.whatsapp.agent_numbers'))) {
-            // Obtener todos los mensajes pendientes
-            $pending = \App\Models\Message::where('requires_human', true)
-                ->where('handled', false)
-                ->with('chat')
-                ->get();
-
-            $response = "📋 Consultas pendientes:\n\n";
-
-            foreach($pending as $msg){
-                $response .= "ID: {$msg->id}\n";
-                $response .= "Usuario: {$msg->chat->user_number}\n";
-                $response .= "Mensaje: {$msg->message}\n\n";
-            }
-
-            $this->sendMessage($from, $response ?: "No hay consultas pendientes.");
-
-            return response()->json(['status'=>'ok']);
-        }
-
-        if (
-            str_starts_with($text, '/responder') &&
-            in_array($from, config('services.whatsapp.agent_numbers'))
-        ) {
-
-            preg_match('/^\/responder (\d+) (.+)$/s', $text, $matches);
-
-            if (count($matches) !== 3) {
-                $this->sendMessage($from, "❌ Usa: /responder <ID> <mensaje>");
-                return response()->json(['status'=>'ok']);
-            }
-
-            [, $msgId, $replyText] = $matches;
-
-            $msg = Message::with('chat')->find($msgId);
-
-            if (!$msg) {
-                $this->sendMessage($from, "❌ Mensaje no encontrado.");
-                return response()->json(['status'=>'ok']);
-            }
-
-            // Guardar respuesta del agente
-            Message::create([
-                'chat_id' => $msg->chat->id,
-                'message' => $replyText,
-                'type' => 'agent',
-                'handled' => true
-            ]);
-
-            // Marcar mensaje original como atendido
-            $msg->update(['handled' => true]);
-
-            // Enviar mensaje al usuario
-            $this->sendMessage($msg->chat->user_number, $replyText);
-
-            $this->sendMessage($from,
-                "✅ Respuesta enviada al usuario {$msg->chat->user_number}"
-            );
-
-            return response()->json(['status'=>'ok']);
-        }
-
-
-        // match ($text) {
-        //     'hola' => $this->sendMessage($from, '¡Hola! 👋 ¿En qué puedo ayudarte?'),
-        //     'info' => $this->sendMessage($from, 'Somos una empresa que ofrece servicios.'),
-        //     default => $this->sendMessage($from, 'No entendí tu mensaje 😅. Escribe *hola* o *info*.'),
-        // };
-
-        $item = $this->findResponseInCatalog($text);
-
-        switch ($item['type']) {
-            case 'text':
-                $this->sendMessage($from, $item['response']);
-                break;
-            case 'image':
-                $this->sendImage($from, $item['url'], $item['caption'] ?? null);
-                break;
-            case 'video':
-                $this->sendVideo($from, $item['url'], $item['caption'] ?? null);
-                break;
-            case 'document':
-                $this->sendDocument($from, $item['url'], $item['filename'] ?? null);
-                break;
-            default:
-                $this->sendMessage($from, "👋 No entendí tu mensaje.");
-        }
+        $this->sendMessage(
+            $from,
+            "👨‍💻 Un asesor humano fue notificado.\nEn breve te atenderemos."
+        );
 
         return response()->json(['status' => 'ok']);
     }
+
+    /**
+     * 👮 Comando /agente (solo agentes)
+     */
+    if ($text === '/agente' && $isAgent) {
+
+        $pending = Message::where('requires_human', true)
+            ->where('handled', false)
+            ->with('chat')
+            ->get();
+
+        $response = "📋 Consultas pendientes:\n\n";
+
+        foreach ($pending as $msg) {
+            $response .= "ID: {$msg->id}\n";
+            $response .= "Usuario: {$msg->chat->user_number}\n";
+            $response .= "Mensaje: {$msg->message}\n\n";
+        }
+
+        $this->sendMessage(
+            $from,
+            $pending->isEmpty() ? "No hay consultas pendientes." : $response
+        );
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    /**
+     * ✍️ Responder como agente
+     */
+    if (str_starts_with($text, '/responder') && $isAgent) {
+
+        preg_match('/^\/responder (\d+) (.+)$/s', $text, $matches);
+
+        if (count($matches) !== 3) {
+            $this->sendMessage($from, "❌ Usa: /responder <ID> <mensaje>");
+            return response()->json(['status' => 'ok']);
+        }
+
+        [, $msgId, $replyText] = $matches;
+
+        $msg = Message::with('chat')->find($msgId);
+
+        if (!$msg) {
+            $this->sendMessage($from, "❌ Mensaje no encontrado.");
+            return response()->json(['status' => 'ok']);
+        }
+
+        // Guardar mensaje del agente
+        Message::create([
+            'chat_id' => $msg->chat->id,
+            'message' => $replyText,
+            'type' => 'agent',
+            'handled' => true
+        ]);
+
+        // Marcar mensaje humano como atendido
+        $msg->update(['handled' => true]);
+
+        // 🔄 Regresar chat a estado open
+        $msg->chat->update(['status' => 'open']);
+
+        $this->sendMessage($msg->chat->user_number, $replyText);
+        $this->sendMessage($from, "✅ Respuesta enviada.");
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    /**
+     * 🤖 Respuesta automática SOLO si el chat está abierto
+     */
+    if ($chat->status !== 'open') {
+        return response()->json(['status' => 'ok']);
+    }
+
+    $item = $this->findResponseInCatalog($text);
+
+    match ($item['type']) {
+        'text' => $this->sendMessage($from, $item['response']),
+        'image' => $this->sendImage($from, $item['url'], $item['caption'] ?? null),
+        'video' => $this->sendVideo($from, $item['url'], $item['caption'] ?? null),
+        'document' => $this->sendDocument($from, $item['url'], $item['filename'] ?? null),
+        default => $this->sendMessage($from, "👋 No entendí tu mensaje.")
+    };
+
+    return response()->json(['status' => 'ok']);
+}
+
 
     private function sendMessage(string $to, string $message): void
     {
