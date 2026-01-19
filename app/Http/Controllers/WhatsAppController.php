@@ -153,16 +153,16 @@ class WhatsAppController extends Controller
 
     private function sendMessage(string $to, string $message): void
     {
-         $chat = Chat::where('user_number', $to)->first();
+        //  $chat = Chat::where('user_number', $to)->first();
 
-        if ($chat) {
-            Message::create([
-                'chat_id' => $chat->id,
-                'message' => $message,
-                'type' => 'bot',
-                'handled' => true
-            ]);
-        }
+        // if ($chat) {
+        //     Message::create([
+        //         'chat_id' => $chat->id,
+        //         'message' => $message,
+        //         'type' => 'bot',
+        //         'handled' => true
+        //     ]);
+        // }
         Http::withToken(config('services.whatsapp.token'))
             ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
                 'messaging_product' => 'whatsapp',
@@ -379,16 +379,16 @@ class WhatsAppController extends Controller
     private function sendDocument(string $to, string $docUrl, string $filename = null): void
     {
 
-        $chat = Chat::where('user_number', $to)->first();
+        // $chat = Chat::where('user_number', $to)->first();
 
-        if ($chat) {
-            Message::create([
-                'chat_id' => $chat->id,
-                'message' => $filename ?? '[Documento enviado]',
-                'type' => 'bot',
-                'handled' => true
-            ]);
-        }
+        // if ($chat) {
+        //     Message::create([
+        //         'chat_id' => $chat->id,
+        //         'message' => $filename ?? '[Documento enviado]',
+        //         'type' => 'bot',
+        //         'handled' => true
+        //     ]);
+        // }
         
         Http::withToken(config('services.whatsapp.token'))
             ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
@@ -403,16 +403,16 @@ class WhatsAppController extends Controller
     }
     private function sendVideo(string $to, string $videoUrl, string $caption = null): void
     {
-         $chat = Chat::where('user_number', $to)->first();
+        //  $chat = Chat::where('user_number', $to)->first();
 
-        if ($chat) {
-            Message::create([
-                'chat_id' => $chat->id,
-                'message' => $caption ?? '[Video enviado]',
-                'type' => 'bot',
-                'handled' => true
-            ]);
-        }
+        // if ($chat) {
+        //     Message::create([
+        //         'chat_id' => $chat->id,
+        //         'message' => $caption ?? '[Video enviado]',
+        //         'type' => 'bot',
+        //         'handled' => true
+        //     ]);
+        // }
 
         Http::withToken(config('services.whatsapp.token'))
             ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
@@ -427,16 +427,16 @@ class WhatsAppController extends Controller
     }
     private function sendImage(string $to, string $imageUrl, string $caption = null): void
     {
-         $chat = Chat::where('user_number', $to)->first();
+        //  $chat = Chat::where('user_number', $to)->first();
 
-        if ($chat) {
-            Message::create([
-                'chat_id' => $chat->id,
-                'message' => $caption ?? '[Imagen enviada]',
-                'type' => 'bot',
-                'handled' => true
-            ]);
-        }
+        // if ($chat) {
+        //     Message::create([
+        //         'chat_id' => $chat->id,
+        //         'message' => $caption ?? '[Imagen enviada]',
+        //         'type' => 'bot',
+        //         'handled' => true
+        //     ]);
+        // }
 
         Http::withToken(config('services.whatsapp.token'))
             ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
