@@ -200,7 +200,7 @@ class WhatsAppController extends Controller
             [
                 'keys' => ['hola', 'inicio', 'buenos', 'buenas', 'menu', 'empezar'],
                 'type' => 'text',
-                'response' => "¡Hola! 👋 Qué gusto saludarte. Bienvenido a *Tecnología Empresarial*.\n\nEstamos encantados de acompañarte en este *2026* para que tu negocio no solo crezca, sino que esté totalmente blindado y a la vanguardia. 🚀\n\n¿Cómo podemos apoyarte hoy? Elige una opción para brindarte atención personalizada:\n\n1️⃣ *Conoce Tecnología Empresarial* (Quiénes somos y nuestro compromiso contigo)\n2️⃣ *Explora nuestros servicios* (CONTPAQi, Rediseño y Capacitación)\n3️⃣ *Soporte Técnico* (Ayuda experta para tus sistemas)\n\n---\n_Solo escribe el **número** o la **palabra** de lo que necesites y te daré los detalles de inmediato. 😊_"
+                'response' => "¡Hola! 👋 Qué gusto saludarte. Bienvenido a *Tecnología Empresarial*.\n\nEstamos encantados de acompañarte en este *2026* para que tu negocio no solo crezca, sino que esté totalmente blindado y a la vanguardia. 🚀\n\n¿Cómo podemos apoyarte hoy? Elige una opción para brindarte atención personalizada:\n\n1️⃣ *Conoce Tecnología Empresarial* (Quiénes somos y nuestro compromiso contigo)\n2️⃣ *Explora nuestros servicios* (CONTPAQi, Rediseño y Capacitación)\n3️⃣ *Soporte Técnico* (Asistencia ejecutiva para tus sistemas)\n\n---\n_Solo escribe el **número** o la **palabra** de lo que necesites y te daré los detalles de inmediato. 😊_"
             ],
             [
                 'keys' => ['gracias', 'adios', 'bye', 'hasta luego'],
