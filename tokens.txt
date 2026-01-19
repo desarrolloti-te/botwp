@@ -17,4 +17,7 @@ business_id=2373931669721089 (lo obtuve de la url del portafolio empresarial htt
 "id": "909859852215632",
 "display_phone_number": "+52 1 993 501 0276"
 
+
 EAAKYlBPp22MBQaRsn4Q5XTUA9iiK56SmXugEwIhV8IHTDkabpGYfImqL31Y3VwZCml2nmEZBZCOyceeZAx6gsRWPjCb0QbyRsAGxaArf0SM8AQfsNi33thsJaKBVpU3ZCbuZAtpXEZCsxgeZBYBvnZAmjH62mTxg9CYmZBMAXJZChjhixjsfbEQ36MtH0qf3MZBetgZDZD
+
+si deja de funcionar probar a poner de nuevo la constraseña en el webhook en meta developers configuracion de la api

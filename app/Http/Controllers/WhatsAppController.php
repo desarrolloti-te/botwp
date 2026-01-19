@@ -27,9 +27,9 @@ class WhatsAppController extends Controller
     public function receive(Request $request)
     {
         
-    \Log::emergency('¡ENTRÓ ALGO!'); // Log de emergencia
-    \Log::info('Payload completo:', $request->all());
-    \Log::info('Webhook detectado', ['data' => $request->all()]);
+    // \Log::emergency('¡ENTRÓ ALGO!'); // Log de emergencia
+    // \Log::info('Payload completo:', $request->all());
+    // \Log::info('Webhook detectado', ['data' => $request->all()]);
 
         $entry = $request->input('entry.0.changes.0.value');
         \Log::info('📩 Mensaje entrante WhatsApp', $request->all());
@@ -44,8 +44,13 @@ class WhatsAppController extends Controller
 
         $chat = Chat::firstOrCreate(
             ['user_number' => $from],
-            ['status' => 'open']
+            ['status' => 'open', 'context' => 'START']
         );
+
+        if (in_array($text, ['hola', 'menu'])) {
+            $chat->update(['context' => 'START']);
+            return $this->handleStartFlow($chat, $from, $text);
+        }
 
         $isHumanRequest = in_array($text, ['asesor', 'humano', 'agente']);
 
@@ -156,16 +161,16 @@ class WhatsAppController extends Controller
 
     private function sendMessage(string $to, string $message): void
     {
-        //  $chat = Chat::where('user_number', $to)->first();
+         $chat = Chat::where('user_number', $to)->first();
 
-        // if ($chat) {
-        //     Message::create([
-        //         'chat_id' => $chat->id,
-        //         'message' => $message,
-        //         'type' => 'bot',
-        //         'handled' => true
-        //     ]);
-        // }
+        if ($chat) {
+            Message::create([
+                'chat_id' => $chat->id,
+                'message' => $message,
+                'type' => 'bot',
+                'handled' => true
+            ]);
+        }
         Http::withToken(config('services.whatsapp.token'))
             ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
                 'messaging_product' => 'whatsapp',
@@ -183,9 +188,21 @@ class WhatsAppController extends Controller
         $catalog = [
             // GREETING
             [
+                'keys' => ['servicios', 'ofrecen', 'ofertan'],
+                'type' => 'text',
+                'response' => "En *Tecnología Empresarial* no solo vendemos software; nos convertimos en tus aliados para *blindar tu empresa* y asegurar que duermas tranquilo con *tu cumplimiento fiscal*. 🛡️\n\n Para ayudarte a elevar el potencial de tu negocio, nos especializamos en tres pilares clave:\n\n 🚀 *1. Ecosistema CONTPAQi®* Somos _Distribuidor Asociado Máster (Nivel Oro)_. No solo te damos la licencia; te acompañamos en la digitalización total de tu empresa con soluciones en la nube, soporte técnico especializado y la experiencia de verdaderos expertos en la marca. \n 📊 *2. Rediseño Empresarial* Transformamos la estructura de tu negocio. Implementamos tecnología para garantizar *_la materialidad y trazabilidad de tus operaciones_*. Logramos que tu administración sea sólida y cumpla con todas las normativas fiscales actuales.\n 🎓 *3. Capacitación Especializada* El talento humano es _el motor de tu empresa_. Nos encargamos de entrenar a tu equipo para que *enfrenten* los retos del mercado, *dominen* las herramientas digitales y *alcancen su máximo nivel de eficiencia*."
+            ],
+            [
+                'keys' => ['conoce', 'Tecnologia', 'sobre'],
+                'type' => 'text',
+                'response' => ""
+            ],
+            [
                 'keys' => ['hola', 'inicio', 'buenos', 'buenas', 'menu', 'empezar'],
                 'type' => 'text',
-                'response' => "¡Hola! 👋 Bienvenido a *Tecnología Empresarial*.\nSomos Arquitectos de Evidencia Operativa.\n\n¿En qué podemos ayudarte hoy?\n1️⃣ *Rediseño 360°* (Blindaje Fiscal)\n2️⃣ *CONTPAQi* (Nube y Licencias)\n3️⃣ *Capacitación* (Cursos STPS)\n4️⃣ *Soporte Técnico*\n\n_Escribe el número o el tema que te interese._"
+                'response' => "¡Hola! 👋 Bienvenido a *Tecnología Empresarial*.\n Somos tu aliado estratégico en el diseño de tu negocio para enfrentar los retos de 2026 \n ¿En qué podemos ayudarte hoy? 1. Conoce Tecnologia Empresarial
+                2. Explora nuestros servicios
+                3. Soporte Técnico \n\n_Escribe el número o el tema que te interese._"
             ],
             [
                 'keys' => ['gracias', 'adios', 'bye', 'hasta luego'],
@@ -382,16 +399,16 @@ class WhatsAppController extends Controller
     private function sendDocument(string $to, string $docUrl, string $filename = null): void
     {
 
-        // $chat = Chat::where('user_number', $to)->first();
+        $chat = Chat::where('user_number', $to)->first();
 
-        // if ($chat) {
-        //     Message::create([
-        //         'chat_id' => $chat->id,
-        //         'message' => $filename ?? '[Documento enviado]',
-        //         'type' => 'bot',
-        //         'handled' => true
-        //     ]);
-        // }
+        if ($chat) {
+            Message::create([
+                'chat_id' => $chat->id,
+                'message' => $filename ?? '[Documento enviado]',
+                'type' => 'bot',
+                'handled' => true
+            ]);
+        }
         
         Http::withToken(config('services.whatsapp.token'))
             ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
@@ -406,16 +423,16 @@ class WhatsAppController extends Controller
     }
     private function sendVideo(string $to, string $videoUrl, string $caption = null): void
     {
-        //  $chat = Chat::where('user_number', $to)->first();
+         $chat = Chat::where('user_number', $to)->first();
 
-        // if ($chat) {
-        //     Message::create([
-        //         'chat_id' => $chat->id,
-        //         'message' => $caption ?? '[Video enviado]',
-        //         'type' => 'bot',
-        //         'handled' => true
-        //     ]);
-        // }
+        if ($chat) {
+            Message::create([
+                'chat_id' => $chat->id,
+                'message' => $caption ?? '[Video enviado]',
+                'type' => 'bot',
+                'handled' => true
+            ]);
+        }
 
         Http::withToken(config('services.whatsapp.token'))
             ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
@@ -430,16 +447,16 @@ class WhatsAppController extends Controller
     }
     private function sendImage(string $to, string $imageUrl, string $caption = null): void
     {
-        //  $chat = Chat::where('user_number', $to)->first();
+         $chat = Chat::where('user_number', $to)->first();
 
-        // if ($chat) {
-        //     Message::create([
-        //         'chat_id' => $chat->id,
-        //         'message' => $caption ?? '[Imagen enviada]',
-        //         'type' => 'bot',
-        //         'handled' => true
-        //     ]);
-        // }
+        if ($chat) {
+            Message::create([
+                'chat_id' => $chat->id,
+                'message' => $caption ?? '[Imagen enviada]',
+                'type' => 'bot',
+                'handled' => true
+            ]);
+        }
 
         Http::withToken(config('services.whatsapp.token'))
             ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
