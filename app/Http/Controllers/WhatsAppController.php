@@ -47,10 +47,10 @@ class WhatsAppController extends Controller
             ['status' => 'open', 'context' => 'START']
         );
 
-        if (in_array($text, ['hola', 'menu'])) {
-            $chat->update(['context' => 'START']);
-            return $this->handleStartFlow($chat, $from, $text);
-        }
+        // if (in_array($text, ['hola', 'menu'])) {
+        //     $chat->update(['context' => 'START']);
+        //     return $this->handleStartFlow($chat, $from, $text);
+        // }
 
         $isHumanRequest = in_array($text, ['asesor', 'humano', 'agente']);
 
