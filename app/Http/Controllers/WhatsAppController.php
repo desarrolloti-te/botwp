@@ -27,6 +27,9 @@ class WhatsAppController extends Controller
     public function receive(Request $request)
     {
         
+    \Log::emergency('¡ENTRÓ ALGO!'); // Log de emergencia
+    \Log::info('Payload completo:', $request->all());
+    \Log::info('Webhook detectado', ['data' => $request->all()]);
 
         $entry = $request->input('entry.0.changes.0.value');
         \Log::info('📩 Mensaje entrante WhatsApp', $request->all());
