@@ -184,10 +184,6 @@ class WhatsAppController extends Controller
             return $this->handleStartFlow($chat, $from, 'hola');
         }
 
-        // Usamos el campo 'message' del último mensaje para saber qué preguntar después
-        // O mejor aún, podrías usar una columna 'step' en tu tabla chats.
-
-        // Suponiendo que acabamos de entrar a QUOTE desde SERVICES:
         if ($chat->context === 'QUOTE' && ! str_contains($chat->last_bot_question, 'correo')) {
             // Si no tenemos su correo, se lo pedimos
             $chat->update(['last_bot_question' => '¿Cuál es tu correo electrónico?']); // Columna opcional para guiar el bot
@@ -216,15 +212,15 @@ class WhatsAppController extends Controller
     {
         if (str_contains($text, '1') || str_contains($text, 'conocer')) {
             $chat->update(['context' => 'INFO']); // Podrías crear este contexto
-            $this->sendMessage($from, "Somos una empresa líder... (Breve info). \n\nEscribe 'servicios' para ver qué hacemos o 'menu' para volver.");
+            $this->sendMessage($from, "Somos especialistas en *blindar tu empresa* y asegurar que duermas tranquilo con *tu cumplimiento fiscal*, es por ello que nos especializamos en tres pilares clave:\n\n 🚀 *1. Ecosistema CONTPAQi®* Somos _Distribuidor Asociado Nivel Oro_. No solo te damos la licencia; te acompañamos en la digitalización total de tu empresa con soluciones en la nube, soporte técnico especializado y la experiencia de verdaderos expertos en la marca. \n\n 📊 *2. Rediseño Empresarial* Transformamos la estructura de tu negocio. Implementamos tecnología para garantizar *_la materialidad, trazabilidad y razón de negocio de tus operaciones_*. Logramos que tu administración sea sólida, automatizando los procesos de tu empresa, cumpliendo con las normativas fiscales actuales.\n\n 🎓 *3. Capacitación Especializada* El talento humano es _el motor de tu empresa_. Nos encargamos de entrenar a tu equipo para que *enfrenten* los retos del mercado, *dominen* las herramientas digitales y *alcancen su máximo nivel de eficiencia*.");
         } elseif (str_contains($text, '2') || str_contains($text, 'servicios')) {
             $chat->update(['context' => 'SERVICES']);
-            $this->sendMessage($from, "Contamos con:\n1. Rediseño 360\n2. CONTPAQi\n3. Nube\n\n¿Cual te interesa cotizar? (Escribe el nombre)");
+            $this->sendMessage($from, "Somos especialistas en *blindar tu empresa* y asegurar que duermas tranquilo con *tu cumplimiento fiscal*, es por ello que nos especializamos en tres pilares clave:\n\n 🚀 *1. Ecosistema CONTPAQi®* Somos _Distribuidor Asociado Nivel Oro_. No solo te damos la licencia; te acompañamos en la digitalización total de tu empresa con soluciones en la nube, soporte técnico especializado y la experiencia de verdaderos expertos en la marca. \n\n 📊 *2. Rediseño Empresarial* Transformamos la estructura de tu negocio. Implementamos tecnología para garantizar *_la materialidad, trazabilidad y razón de negocio de tus operaciones_*. Logramos que tu administración sea sólida, automatizando los procesos de tu empresa, cumpliendo con las normativas fiscales actuales.\n\n 🎓 *3. Capacitación Especializada* El talento humano es _el motor de tu empresa_. Nos encargamos de entrenar a tu equipo para que *enfrenten* los retos del mercado, *dominen* las herramientas digitales y *alcancen su máximo nivel de eficiencia*.");
         } elseif (str_contains($text, '3') || str_contains($text, 'soporte')) {
             $chat->update(['context' => 'SUPPORT']);
             $this->sendMessage($from, "🛠️ Bienvenido a Soporte Técnico.\n1. Reportar falla nueva\n2. Consultar ticket existente\n0. Volver al menú");
         } else {
-            $this->sendMessage($from, "¡Hola! Bienvenido. Por favor elige una opción:\n1. Conócenos\n2. Servicios y Cotización\n3. Soporte Técnico");
+            $this->sendMessage($from, "¡Hola! 👋 Qué gusto saludarte. Bienvenido a *Tecnología Empresarial*.\n\nEstamos encantados de acompañarte en este *2026* para que tu negocio no solo crezca, sino que esté totalmente blindado y a la vanguardia. 🚀\n\n¿Cómo podemos apoyarte hoy?\n\n1️⃣ *Conoce Tecnología Empresarial* (Quiénes somos y nuestro compromiso contigo)\n2️⃣ *Explora nuestros servicios* (CONTPAQi, Rediseño y Capacitación)\n3️⃣ *Soporte Técnico* (Asistencia ejecutiva para tus sistemas)\n\n_Solo escribe el **número** o la **palabra** de lo que necesites y procesaré tu solicitud de inmediato. 😊_");
         }
 
         return response()->json(['status' => 'ok']);
@@ -240,7 +236,6 @@ class WhatsAppController extends Controller
             $chat->update(['context' => 'CHECK_TICKET']);
         } elseif ($text == '0') {
             $chat->update(['context' => 'START']);
-
             return $this->handleStartFlow($chat, $from, 'hola');
         }
 
