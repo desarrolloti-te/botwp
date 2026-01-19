@@ -10,6 +10,7 @@
         "botman/botman": "^2.8",
         "botman/driver-web": "^1.5",
         "laravel/framework": "^12.0",
+        "laravel/reverb": "^1.7",
         "laravel/tinker": "^2.10.1"
     },
     "require-dev": {
