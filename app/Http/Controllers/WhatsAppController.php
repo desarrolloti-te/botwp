@@ -2,13 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
-
-//models
 use App\Models\Chat;
 use App\Models\Message;
-
+// models
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 
 class WhatsAppController extends Controller
 {
@@ -26,15 +24,15 @@ class WhatsAppController extends Controller
 
     public function receive(Request $request)
     {
-        
-    // \Log::emergency('¡ENTRÓ ALGO!'); // Log de emergencia
-    // \Log::info('Payload completo:', $request->all());
-    // \Log::info('Webhook detectado', ['data' => $request->all()]);
+
+        // \Log::emergency('¡ENTRÓ ALGO!'); // Log de emergencia
+        // \Log::info('Payload completo:', $request->all());
+        // \Log::info('Webhook detectado', ['data' => $request->all()]);
 
         $entry = $request->input('entry.0.changes.0.value');
         \Log::info('📩 Mensaje entrante WhatsApp', $request->all());
 
-        if (!$entry || empty($entry['messages'])) {
+        if (! $entry || empty($entry['messages'])) {
             return response()->json(['status' => 'ok']);
         }
 
@@ -47,6 +45,21 @@ class WhatsAppController extends Controller
             ['status' => 'open', 'context' => 'START']
         );
 
+        if (in_array($text, ['hola', 'menu', 'inicio', 'empezar'])) {
+            $chat->update(['context' => 'START']);
+
+            return $this->handleStartFlow($chat, $from, $text);
+        }
+
+        // Procesar según el contexto actual
+        return match ($chat->context) {
+            'START' => $this->handleStartFlow($chat, $from, $text),
+            'SERVICES' => $this->handleServicesFlow($chat, $from, $text),
+            'SUPPORT' => $this->handleSupportFlow($chat, $from, $text),
+            'QUOTE' => $this->handleQuoteFlow($chat, $from, $text),
+            default => $this->handleStartFlow($chat, $from, $text),
+        };
+
         // if (in_array($text, ['hola', 'menu'])) {
         //     $chat->update(['context' => 'START']);
         //     return $this->handleStartFlow($chat, $from, $text);
@@ -58,17 +71,18 @@ class WhatsAppController extends Controller
             'chat_id' => $chat->id,
             'message' => $text,
             'type' => 'user',
-            'requires_human' => $isHumanRequest
+            'requires_human' => $isHumanRequest,
         ]);
 
         if ($isHumanRequest) {
             $this->sendMessage($from,
                 "👨‍💻 Un asesor humano fue notificado.\nEn breve te atenderemos."
             );
+
             return response()->json(['status' => 'ok']);
         }
 
-        if($text === '/agente' && in_array($from, config('services.whatsapp.agent_numbers'))) {
+        if ($text === '/agente' && in_array($from, config('services.whatsapp.agent_numbers'))) {
             // Obtener todos los mensajes pendientes
             $pending = \App\Models\Message::where('requires_human', true)
                 ->where('handled', false)
@@ -77,15 +91,15 @@ class WhatsAppController extends Controller
 
             $response = "📋 Consultas pendientes:\n\n";
 
-            foreach($pending as $msg){
+            foreach ($pending as $msg) {
                 $response .= "ID: {$msg->id}\n";
                 $response .= "Usuario: {$msg->chat->user_number}\n";
                 $response .= "Mensaje: {$msg->message}\n\n";
             }
 
-            $this->sendMessage($from, $response ?: "No hay consultas pendientes.");
+            $this->sendMessage($from, $response ?: 'No hay consultas pendientes.');
 
-            return response()->json(['status'=>'ok']);
+            return response()->json(['status' => 'ok']);
         }
 
         if (
@@ -96,17 +110,19 @@ class WhatsAppController extends Controller
             preg_match('/^\/responder (\d+) (.+)$/s', $text, $matches);
 
             if (count($matches) !== 3) {
-                $this->sendMessage($from, "❌ Usa: /responder <ID> <mensaje>");
-                return response()->json(['status'=>'ok']);
+                $this->sendMessage($from, '❌ Usa: /responder <ID> <mensaje>');
+
+                return response()->json(['status' => 'ok']);
             }
 
             [, $msgId, $replyText] = $matches;
 
             $msg = Message::with('chat')->find($msgId);
 
-            if (!$msg) {
-                $this->sendMessage($from, "❌ Mensaje no encontrado.");
-                return response()->json(['status'=>'ok']);
+            if (! $msg) {
+                $this->sendMessage($from, '❌ Mensaje no encontrado.');
+
+                return response()->json(['status' => 'ok']);
             }
 
             // Guardar respuesta del agente
@@ -114,7 +130,7 @@ class WhatsAppController extends Controller
                 'chat_id' => $msg->chat->id,
                 'message' => $replyText,
                 'type' => 'agent',
-                'handled' => true
+                'handled' => true,
             ]);
 
             // Marcar mensaje original como atendido
@@ -127,9 +143,8 @@ class WhatsAppController extends Controller
                 "✅ Respuesta enviada al usuario {$msg->chat->user_number}"
             );
 
-            return response()->json(['status'=>'ok']);
+            return response()->json(['status' => 'ok']);
         }
-
 
         // match ($text) {
         //     'hola' => $this->sendMessage($from, '¡Hola! 👋 ¿En qué puedo ayudarte?'),
@@ -153,7 +168,80 @@ class WhatsAppController extends Controller
                 $this->sendDocument($from, $item['url'], $item['filename'] ?? null);
                 break;
             default:
-                $this->sendMessage($from, "👋 No entendí tu mensaje.");
+                $this->sendMessage($from, '👋 No entendí tu mensaje.');
+        }
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    private function handleQuoteFlow($chat, $from, $text)
+    {
+        // 1. Si el usuario quiere cancelar
+        if (in_array($text, ['cancelar', 'salir', '0'])) {
+            $chat->update(['context' => 'START']);
+            $this->sendMessage($from, 'Cotización cancelada. Volviendo al menú principal...');
+
+            return $this->handleStartFlow($chat, $from, 'hola');
+        }
+
+        // Usamos el campo 'message' del último mensaje para saber qué preguntar después
+        // O mejor aún, podrías usar una columna 'step' en tu tabla chats.
+
+        // Suponiendo que acabamos de entrar a QUOTE desde SERVICES:
+        if ($chat->context === 'QUOTE' && ! str_contains($chat->last_bot_question, 'correo')) {
+            // Si no tenemos su correo, se lo pedimos
+            $chat->update(['last_bot_question' => '¿Cuál es tu correo electrónico?']); // Columna opcional para guiar el bot
+            $this->sendMessage($from, "Perfecto, para enviarte la propuesta formal necesito 2 datos.\n\n1️⃣ ¿Cuál es tu *correo electrónico*?");
+
+            return response()->json(['status' => 'ok']);
+        }
+
+        // Si el usuario respondió algo que parece un correo
+        if (filter_var($text, FILTER_VALIDATE_EMAIL)) {
+            $chat->update(['context' => 'QUOTE_CONFIRMED']);
+            $this->sendMessage($from, "✅ ¡Gracias! Hemos recibido tu solicitud. Un asesor comercial te enviará la cotización a *$text* en menos de 2 horas.");
+
+            // Notificar a un agente (opcional)
+            $this->notifyAgent("Nueva solicitud de cotización del número: $from para el correo: $text");
+
+            $chat->update(['context' => 'START']); // Regresamos al inicio
+        } else {
+            $this->sendMessage($from, "❌ El correo no parece válido. Por favor, escríbelo de nuevo o escribe 'cancelar'.");
+        }
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    private function handleStartFlow($chat, $from, $text)
+    {
+        if (str_contains($text, '1') || str_contains($text, 'conocer')) {
+            $chat->update(['context' => 'INFO']); // Podrías crear este contexto
+            $this->sendMessage($from, "Somos una empresa líder... (Breve info). \n\nEscribe 'servicios' para ver qué hacemos o 'menu' para volver.");
+        } elseif (str_contains($text, '2') || str_contains($text, 'servicios')) {
+            $chat->update(['context' => 'SERVICES']);
+            $this->sendMessage($from, "Contamos con:\n1. Rediseño 360\n2. CONTPAQi\n3. Nube\n\n¿Cual te interesa cotizar? (Escribe el nombre)");
+        } elseif (str_contains($text, '3') || str_contains($text, 'soporte')) {
+            $chat->update(['context' => 'SUPPORT']);
+            $this->sendMessage($from, "🛠️ Bienvenido a Soporte Técnico.\n1. Reportar falla nueva\n2. Consultar ticket existente\n0. Volver al menú");
+        } else {
+            $this->sendMessage($from, "¡Hola! Bienvenido. Por favor elige una opción:\n1. Conócenos\n2. Servicios y Cotización\n3. Soporte Técnico");
+        }
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    private function handleSupportFlow($chat, $from, $text)
+    {
+        if ($text == '1') {
+            $this->sendMessage($from, 'Por favor, describe tu falla en un solo mensaje y adjunta una imagen si es posible. Un técnico lo recibirá.');
+            // Aquí podrías cambiar el contexto a 'WAITING_ERROR_DESC'
+        } elseif ($text == '2') {
+            $this->sendMessage($from, 'Introduce tu número de ticket:');
+            $chat->update(['context' => 'CHECK_TICKET']);
+        } elseif ($text == '0') {
+            $chat->update(['context' => 'START']);
+
+            return $this->handleStartFlow($chat, $from, 'hola');
         }
 
         return response()->json(['status' => 'ok']);
@@ -161,18 +249,18 @@ class WhatsAppController extends Controller
 
     private function sendMessage(string $to, string $message): void
     {
-         $chat = Chat::where('user_number', $to)->first();
+        $chat = Chat::where('user_number', $to)->first();
 
         if ($chat) {
             Message::create([
                 'chat_id' => $chat->id,
                 'message' => $message,
                 'type' => 'bot',
-                'handled' => true
+                'handled' => true,
             ]);
         }
         Http::withToken(config('services.whatsapp.token'))
-            ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+            ->post(config('services.whatsapp.url').'/'.config('services.whatsapp.phone_id').'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => $to,
                 'type' => 'text',
@@ -184,196 +272,196 @@ class WhatsAppController extends Controller
 
     private function findResponseInCatalog(string $input): array
     {
-        
+
         $catalog = [
             // GREETING
             [
                 'keys' => ['servicios', 'ofrecen', 'ofertan'],
                 'type' => 'text',
-                'response' => "Somos especialistas en *blindar tu empresa* y asegurar que duermas tranquilo con *tu cumplimiento fiscal*, es por ello que nos especializamos en tres pilares clave:\n\n 🚀 *1. Ecosistema CONTPAQi®* Somos _Distribuidor Asociado Nivel Oro_. No solo te damos la licencia; te acompañamos en la digitalización total de tu empresa con soluciones en la nube, soporte técnico especializado y la experiencia de verdaderos expertos en la marca. \n\n 📊 *2. Rediseño Empresarial* Transformamos la estructura de tu negocio. Implementamos tecnología para garantizar *_la materialidad, trazabilidad y razón de negocio de tus operaciones_*. Logramos que tu administración sea sólida, automatizando los procesos de tu empresa, cumpliendo con las normativas fiscales actuales.\n\n 🎓 *3. Capacitación Especializada* El talento humano es _el motor de tu empresa_. Nos encargamos de entrenar a tu equipo para que *enfrenten* los retos del mercado, *dominen* las herramientas digitales y *alcancen su máximo nivel de eficiencia*."
+                'response' => "Somos especialistas en *blindar tu empresa* y asegurar que duermas tranquilo con *tu cumplimiento fiscal*, es por ello que nos especializamos en tres pilares clave:\n\n 🚀 *1. Ecosistema CONTPAQi®* Somos _Distribuidor Asociado Nivel Oro_. No solo te damos la licencia; te acompañamos en la digitalización total de tu empresa con soluciones en la nube, soporte técnico especializado y la experiencia de verdaderos expertos en la marca. \n\n 📊 *2. Rediseño Empresarial* Transformamos la estructura de tu negocio. Implementamos tecnología para garantizar *_la materialidad, trazabilidad y razón de negocio de tus operaciones_*. Logramos que tu administración sea sólida, automatizando los procesos de tu empresa, cumpliendo con las normativas fiscales actuales.\n\n 🎓 *3. Capacitación Especializada* El talento humano es _el motor de tu empresa_. Nos encargamos de entrenar a tu equipo para que *enfrenten* los retos del mercado, *dominen* las herramientas digitales y *alcancen su máximo nivel de eficiencia*.",
             ],
             [
                 'keys' => ['conoce', 'Tecnologia', 'sobre'],
                 'type' => 'text',
-                'response' => ""
+                'response' => '',
             ],
             [
                 'keys' => ['hola', 'inicio', 'buenos', 'buenas', 'menu', 'empezar'],
                 'type' => 'text',
-                'response' => "¡Hola! 👋 Qué gusto saludarte. Bienvenido a *Tecnología Empresarial*.\n\nEstamos encantados de acompañarte en este *2026* para que tu negocio no solo crezca, sino que esté totalmente blindado y a la vanguardia. 🚀\n\n¿Cómo podemos apoyarte hoy?\n\n1️⃣ *Conoce Tecnología Empresarial* (Quiénes somos y nuestro compromiso contigo)\n2️⃣ *Explora nuestros servicios* (CONTPAQi, Rediseño y Capacitación)\n3️⃣ *Soporte Técnico* (Asistencia ejecutiva para tus sistemas)\n\n_Solo escribe el **número** o la **palabra** de lo que necesites y procesaré tu solicitud de inmediato. 😊_"
+                'response' => "¡Hola! 👋 Qué gusto saludarte. Bienvenido a *Tecnología Empresarial*.\n\nEstamos encantados de acompañarte en este *2026* para que tu negocio no solo crezca, sino que esté totalmente blindado y a la vanguardia. 🚀\n\n¿Cómo podemos apoyarte hoy?\n\n1️⃣ *Conoce Tecnología Empresarial* (Quiénes somos y nuestro compromiso contigo)\n2️⃣ *Explora nuestros servicios* (CONTPAQi, Rediseño y Capacitación)\n3️⃣ *Soporte Técnico* (Asistencia ejecutiva para tus sistemas)\n\n_Solo escribe el **número** o la **palabra** de lo que necesites y procesaré tu solicitud de inmediato. 😊_",
             ],
             [
                 'keys' => ['gracias', 'adios', 'bye', 'hasta luego'],
                 'type' => 'text',
-                'response' => "¡Gracias a ti! Estamos para blindar tu operación. Si necesitas algo más, aquí seguiremos. 🛡️"
+                'response' => '¡Gracias a ti! Estamos para blindar tu operación. Si necesitas algo más, aquí seguiremos. 🛡️',
             ],
             [
                 'keys' => ['ubicacion', 'direccion', 'donde estan', 'oficina'],
                 'type' => 'text',
-                'response' => "📍 Nos encontramos listos para atenderte. Si requieres una visita presencial o consultoría en sitio, por favor escribe *'Cita'* para coordinar con un asesor."
+                'response' => "📍 Nos encontramos listos para atenderte. Si requieres una visita presencial o consultoría en sitio, por favor escribe *'Cita'* para coordinar con un asesor.",
             ],
 
             // --- GRUPO 2: REDISEÑO Y BLINDAJE ---
             [
                 'keys' => ['rediseño', 'rediseno', 'blindaje', 'reingenieria'],
                 'type' => 'text',
-                'response' => "🛡️ Nuestro *Rediseño 360°* no es solo software. Reestructuramos tus procesos administrativos para garantizar la *Materialidad* y *Razón de Negocios* que exige el SAT.\n\n¿Te gustaría agendar un diagnóstico de vulnerabilidad?"
+                'response' => "🛡️ Nuestro *Rediseño 360°* no es solo software. Reestructuramos tus procesos administrativos para garantizar la *Materialidad* y *Razón de Negocios* que exige el SAT.\n\n¿Te gustaría agendar un diagnóstico de vulnerabilidad?",
             ],
             [
                 'keys' => ['reforma', '2026', 'fiscal', 'sat', 'hacienda'],
                 'type' => 'text',
-                'response' => "⚠️ *Alerta 2026:* La fiscalización será inteligente. Lo que no está documentado digitalmente, no existe.\nTe ayudamos a generar la evidencia operativa necesaria para evitar multas. Escribe *'Diagnóstico'* para empezar."
+                'response' => "⚠️ *Alerta 2026:* La fiscalización será inteligente. Lo que no está documentado digitalmente, no existe.\nTe ayudamos a generar la evidencia operativa necesaria para evitar multas. Escribe *'Diagnóstico'* para empezar.",
             ],
             [
                 'keys' => ['materialidad', 'razon de negocio', 'evidencia'],
                 'type' => 'text',
-                'response' => "La *Materialidad* es la clave para deducir impuestos hoy. Nosotros alineamos tu operación (compras, ventas, inventarios) para que cada movimiento genere su evidencia automática. ¿Quieres saber cómo?"
+                'response' => 'La *Materialidad* es la clave para deducir impuestos hoy. Nosotros alineamos tu operación (compras, ventas, inventarios) para que cada movimiento genere su evidencia automática. ¿Quieres saber cómo?',
             ],
             [
                 'keys' => ['auditoria', 'revision', 'multa', 'miedo', 'sancion'],
                 'type' => 'text',
-                'response' => "No esperes a la notificación. 🛑 Nuestro servicio preventivo detecta inconsistencias antes que la autoridad. Actuamos como un escudo fiscal mediante tecnología y procesos."
+                'response' => 'No esperes a la notificación. 🛑 Nuestro servicio preventivo detecta inconsistencias antes que la autoridad. Actuamos como un escudo fiscal mediante tecnología y procesos.',
             ],
 
             // --- GRUPO 3: CONTPAQI Y NUBE ---
             [
                 'keys' => ['contpaqi', 'sistema', 'programa', 'software'],
                 'type' => 'text',
-                'response' => "Somos *Socios Máster* con 30 años de experiencia. 🏅 Implementamos, configuramos y damos soporte a toda la suite CONTPAQi.\n¿Buscas una licencia nueva o renovar?"
+                'response' => "Somos *Socios Máster* con 30 años de experiencia. 🏅 Implementamos, configuramos y damos soporte a toda la suite CONTPAQi.\n¿Buscas una licencia nueva o renovar?",
             ],
             [
                 'keys' => ['nube', 'escritorio', 'virtual', 'remoto', 'vdi'],
                 'type' => 'text',
-                'response' => "☁️ *¡Lleva tu oficina a cualquier lugar!* Con nuestros Escritorios Virtuales olvídate de servidores físicos, fallas de luz y mantenimientos. Tu información segura y respaldada diariamente. ¿Te interesa ver los paquetes?"
+                'response' => '☁️ *¡Lleva tu oficina a cualquier lugar!* Con nuestros Escritorios Virtuales olvídate de servidores físicos, fallas de luz y mantenimientos. Tu información segura y respaldada diariamente. ¿Te interesa ver los paquetes?',
             ],
             [
                 'keys' => ['contabilidad', 'contable'],
                 'type' => 'text',
-                'response' => "*CONTPAQi Contabilidad* es el líder fiscal. Nosotros no solo lo instalamos, te enseñamos a usarlo para generar reportes financieros reales, no solo para cumplir. 📊"
+                'response' => '*CONTPAQi Contabilidad* es el líder fiscal. Nosotros no solo lo instalamos, te enseñamos a usarlo para generar reportes financieros reales, no solo para cumplir. 📊',
             ],
             [
                 'keys' => ['nominas', 'nomina', 'empleados'],
                 'type' => 'text',
-                'response' => "Gestiona tu capital humano sin errores. *CONTPAQi Nóminas* cumple con todas las leyes laborales vigentes. ¿Necesitas ayuda con timbrado o cálculo?"
+                'response' => 'Gestiona tu capital humano sin errores. *CONTPAQi Nóminas* cumple con todas las leyes laborales vigentes. ¿Necesitas ayuda con timbrado o cálculo?',
             ],
             [
                 'keys' => ['comercial', 'facturacion', 'factura', 'inventario'],
                 'type' => 'text',
-                'response' => "Controla inventarios, cuentas por cobrar y facturación al día con *CONTPAQi Comercial*. Ideal para integrar tu operación administrativa. 📦"
+                'response' => 'Controla inventarios, cuentas por cobrar y facturación al día con *CONTPAQi Comercial*. Ideal para integrar tu operación administrativa. 📦',
             ],
             [
                 'keys' => ['bancos', 'tesoreria', 'flujo'],
                 'type' => 'text',
-                'response' => "Conecta tus bancos con tu contabilidad automáticamente. Evita la talacha manual y ten tu flujo de efectivo al día con *CONTPAQi Bancos*. 💸"
+                'response' => 'Conecta tus bancos con tu contabilidad automáticamente. Evita la talacha manual y ten tu flujo de efectivo al día con *CONTPAQi Bancos*. 💸',
             ],
 
             // --- GRUPO 4: CAPACITACIÓN ---
             [
                 'keys' => ['capacitacion', 'curso', 'aprender', 'enseñar', 'taller'],
                 'type' => 'text',
-                'response' => "🎓 El software no comete errores, las personas sí. Ofrecemos capacitación para convertir a tu equipo en expertos operativos. ¿Buscas cursos para Contabilidad, Nóminas o Administración?"
+                'response' => '🎓 El software no comete errores, las personas sí. Ofrecemos capacitación para convertir a tu equipo en expertos operativos. ¿Buscas cursos para Contabilidad, Nóminas o Administración?',
             ],
             [
                 'keys' => ['stps', 'certificado', 'constancia', 'diploma'],
                 'type' => 'text',
-                'response' => "Nuestros cursos tienen valor curricular y registro ante la *STPS*. Capacitación formal para profesionalizar a tu empresa y cumplir con la normativa laboral."
+                'response' => 'Nuestros cursos tienen valor curricular y registro ante la *STPS*. Capacitación formal para profesionalizar a tu empresa y cumplir con la normativa laboral.',
             ],
 
             // --- GRUPO 5: SOPORTE TÉCNICO ---
             [
                 'keys' => ['soporte', 'ayuda', 'tecnico', 'fallando', 'apoyo'],
                 'type' => 'text',
-                'response' => "🛠️ Entendemos la urgencia. Para soporte técnico inmediato, por favor describe tu problema o envía una foto del error. Un ingeniero te atenderá en breve."
+                'response' => '🛠️ Entendemos la urgencia. Para soporte técnico inmediato, por favor describe tu problema o envía una foto del error. Un ingeniero te atenderá en breve.',
             ],
             [
                 'keys' => ['error', 'no abre', 'lento', 'mensaje'],
                 'type' => 'text',
-                'response' => "Detectamos que tienes un problema técnico. ¿Es en servidor físico o en la Nube? Escribe *'Físico'* o *'Nube'* para orientarte mejor."
+                'response' => "Detectamos que tienes un problema técnico. ¿Es en servidor físico o en la Nube? Escribe *'Físico'* o *'Nube'* para orientarte mejor.",
             ],
             [
                 'keys' => ['actualizacion', 'version', 'actualizar'],
                 'type' => 'text',
-                'response' => "Mantenerse actualizado es obligatorio por el SAT. ¿Deseas cotizar la actualización a la última versión de tu sistema?"
+                'response' => 'Mantenerse actualizado es obligatorio por el SAT. ¿Deseas cotizar la actualización a la última versión de tu sistema?',
             ],
             [
                 'keys' => ['migracion', 'cambio', 'mover'],
                 'type' => 'text',
-                'response' => "¿Quieres mover tu información a un nuevo servidor o a la Nube? Somos expertos en migraciones sin pérdida de datos. 💾"
+                'response' => '¿Quieres mover tu información a un nuevo servidor o a la Nube? Somos expertos en migraciones sin pérdida de datos. 💾',
             ],
 
             // --- GRUPO 6: VENTAS Y CIERRE ---
             [
                 'keys' => ['precio', 'costo', 'cuanto cuesta', 'cotizacion', 'valor'],
                 'type' => 'text',
-                'response' => "Cada empresa es única. Para darte un precio justo, necesitamos saber el número de usuarios y el tipo de servicio.\n\n¿Te gustaría hablar con un asesor comercial ahora?"
+                'response' => "Cada empresa es única. Para darte un precio justo, necesitamos saber el número de usuarios y el tipo de servicio.\n\n¿Te gustaría hablar con un asesor comercial ahora?",
             ],
             [
                 'keys' => ['comprar', 'adquirir', 'contratar', 'quiero'],
                 'type' => 'text',
-                'response' => "¡Excelente decisión! 🎉 Estás a un paso de blindar tu empresa. Por favor compártenos tu *Nombre* y *Correo* para enviarte la propuesta formal."
+                'response' => '¡Excelente decisión! 🎉 Estás a un paso de blindar tu empresa. Por favor compártenos tu *Nombre* y *Correo* para enviarte la propuesta formal.',
             ],
             [
                 'keys' => ['cita', 'reunion', 'agendar', 'visita'],
                 'type' => 'text',
-                'response' => "🗓️ Claro, agendemos una sesión para analizar tus necesidades. ¿Prefieres cita presencial o videollamada?"
+                'response' => '🗓️ Claro, agendemos una sesión para analizar tus necesidades. ¿Prefieres cita presencial o videollamada?',
             ],
             [
                 'keys' => ['diagnostico', 'analisis', 'evaluacion'],
                 'type' => 'text',
-                'response' => "Nuestro *Diagnóstico Operativo* revela tus riesgos fiscales actuales. Es el primer paso hacia el Rediseño. Escribe *'Si'* para coordinarlo."
+                'response' => "Nuestro *Diagnóstico Operativo* revela tus riesgos fiscales actuales. Es el primer paso hacia el Rediseño. Escribe *'Si'* para coordinarlo.",
             ],
 
             // --- GRUPO 7: SECTORES ---
             [
                 'keys' => ['petrolero', 'energia', 'gas', 'petroleo'],
                 'type' => 'text',
-                'response' => "Tenemos amplia experiencia en el sector *Petrolero*. Sabemos manejar la complejidad de tus volúmenes de operación y requisitos fiscales específicos. 🛢️"
+                'response' => 'Tenemos amplia experiencia en el sector *Petrolero*. Sabemos manejar la complejidad de tus volúmenes de operación y requisitos fiscales específicos. 🛢️',
             ],
             [
                 'keys' => ['construccion', 'obra', 'constructor'],
                 'type' => 'text',
-                'response' => "El sector *Construcción* requiere controles de obra precisos. Te ayudamos a integrar tus presupuestos con tu contabilidad para evitar desvíos. 🏗️"
+                'response' => 'El sector *Construcción* requiere controles de obra precisos. Te ayudamos a integrar tus presupuestos con tu contabilidad para evitar desvíos. 🏗️',
             ],
             [
                 'keys' => ['administrativo', 'servicios', 'despacho'],
                 'type' => 'text',
-                'response' => "Optimizamos empresas de *Servicios* para que la facturación y cobranza sean automáticas. Recupera tu tiempo y enfócate en tus clientes. ⏱️"
+                'response' => 'Optimizamos empresas de *Servicios* para que la facturación y cobranza sean automáticas. Recupera tu tiempo y enfócate en tus clientes. ⏱️',
             ],
 
             // --- GRUPO 8: INFO EMPRESA ---
             [
                 'keys' => ['quien eres', 'que hacen', 'nosotros', 'empresa'],
                 'type' => 'text',
-                'response' => "Somos *Tecnología Empresarial*. No somos simples distribuidores; somos consultores con 30 años de experiencia liderados por la L.C.P. Verónica De León. Organizamos tu negocio."
+                'response' => 'Somos *Tecnología Empresarial*. No somos simples distribuidores; somos consultores con 30 años de experiencia liderados por la L.C.P. Verónica De León. Organizamos tu negocio.',
             ],
             [
                 'keys' => ['veronica', 'dueña', 'fundadora', 'lcp'],
                 'type' => 'text',
-                'response' => "La *L.C.P. Verónica De León* es nuestra socia fundadora, especialista fiscal y creadora de metodologías de cálculo automático. Estás en manos expertas."
+                'response' => 'La *L.C.P. Verónica De León* es nuestra socia fundadora, especialista fiscal y creadora de metodologías de cálculo automático. Estás en manos expertas.',
             ],
             [
                 'keys' => ['telefono', 'llamar', 'celular', 'numero'],
                 'type' => 'text',
-                'response' => "📞 Puedes llamarnos al número 99. Nuestro horario es de 9:00 AM a 6:00 PM. ¿Prefieres que te llamemos nosotros?"
+                'response' => '📞 Puedes llamarnos al número 99. Nuestro horario es de 9:00 AM a 6:00 PM. ¿Prefieres que te llamemos nosotros?',
             ],
 
             [
                 'keys' => ['foto', 'imagen', 'producto'],
                 'type' => 'image',
                 'url' => 'https://botwp.tecnologiaempresarial.mx/images/XPLUS.png',
-                'caption' => '📸 Nuestro producto destacado'
+                'caption' => '📸 Nuestro producto destacado',
             ],
             [
                 'keys' => ['video', 'demostracion', 'demo'],
                 'type' => 'video',
                 'url' => 'https://botwp.tecnologiaempresarial.mx/videos/XPLUS.mp4',
-                'caption' => '🎥 Mira cómo funciona nuestro servicio'
+                'caption' => '🎥 Mira cómo funciona nuestro servicio',
             ],
             [
                 'keys' => ['catalogo', 'pdf', 'documento'],
                 'type' => 'document',
                 'url' => 'https://botwp.tecnologiaempresarial.mx/docs/XPLUS.pdf',
-                'filename' => 'Catalogo2026.pdf'
+                'filename' => 'Catalogo2026.pdf',
             ],
             // AGREGAR AQUÍ EL RESTO DE LOS 30 MENSAJES DEL CATÁLOGO ARRIBA...
         ];
@@ -390,11 +478,11 @@ class WhatsAppController extends Controller
         // Respuesta por defecto (Default Fallback)
         return [
             'type' => 'text',
-            'response' => "👋 No estoy seguro de cómo responder a eso, pero quiero ayudarte.\n\nPrueba escribiendo:\n- *'Rediseño'* para blindaje fiscal.\n- *'Nube'* para escritorios virtuales.\n- *'Asesor'* para hablar con un humano."
+            'response' => "👋 No estoy seguro de cómo responder a eso, pero quiero ayudarte.\n\nPrueba escribiendo:\n- *'Rediseño'* para blindaje fiscal.\n- *'Nube'* para escritorios virtuales.\n- *'Asesor'* para hablar con un humano.",
         ];
     }
 
-    private function sendDocument(string $to, string $docUrl, string $filename = null): void
+    private function sendDocument(string $to, string $docUrl, ?string $filename = null): void
     {
 
         $chat = Chat::where('user_number', $to)->first();
@@ -404,12 +492,12 @@ class WhatsAppController extends Controller
                 'chat_id' => $chat->id,
                 'message' => $filename ?? '[Documento enviado]',
                 'type' => 'bot',
-                'handled' => true
+                'handled' => true,
             ]);
         }
-        
+
         Http::withToken(config('services.whatsapp.token'))
-            ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+            ->post(config('services.whatsapp.url').'/'.config('services.whatsapp.phone_id').'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => $to,
                 'type' => 'document',
@@ -419,21 +507,22 @@ class WhatsAppController extends Controller
                 ],
             ]);
     }
-    private function sendVideo(string $to, string $videoUrl, string $caption = null): void
+
+    private function sendVideo(string $to, string $videoUrl, ?string $caption = null): void
     {
-         $chat = Chat::where('user_number', $to)->first();
+        $chat = Chat::where('user_number', $to)->first();
 
         if ($chat) {
             Message::create([
                 'chat_id' => $chat->id,
                 'message' => $caption ?? '[Video enviado]',
                 'type' => 'bot',
-                'handled' => true
+                'handled' => true,
             ]);
         }
 
         Http::withToken(config('services.whatsapp.token'))
-            ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+            ->post(config('services.whatsapp.url').'/'.config('services.whatsapp.phone_id').'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => $to,
                 'type' => 'video',
@@ -443,21 +532,22 @@ class WhatsAppController extends Controller
                 ],
             ]);
     }
-    private function sendImage(string $to, string $imageUrl, string $caption = null): void
+
+    private function sendImage(string $to, string $imageUrl, ?string $caption = null): void
     {
-         $chat = Chat::where('user_number', $to)->first();
+        $chat = Chat::where('user_number', $to)->first();
 
         if ($chat) {
             Message::create([
                 'chat_id' => $chat->id,
                 'message' => $caption ?? '[Imagen enviada]',
                 'type' => 'bot',
-                'handled' => true
+                'handled' => true,
             ]);
         }
 
         Http::withToken(config('services.whatsapp.token'))
-            ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+            ->post(config('services.whatsapp.url').'/'.config('services.whatsapp.phone_id').'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => $to,
                 'type' => 'image',
@@ -467,5 +557,4 @@ class WhatsAppController extends Controller
                 ],
             ]);
     }
-
 }
