@@ -190,7 +190,7 @@ class WhatsAppController extends Controller
             [
                 'keys' => ['servicios', 'ofrecen', 'ofertan'],
                 'type' => 'text',
-                'response' => "Somos especialistas en *blindar tu empresa* y asegurar que duermas tranquilo con *tu cumplimiento fiscal*, es por ello que nos especializamos en tres pilares clave:\n\n 🚀 *1. Ecosistema CONTPAQi®* Somos _Distribuidor Asociado Máster (Nivel Oro)_. No solo te damos la licencia; te acompañamos en la digitalización total de tu empresa con soluciones en la nube, soporte técnico especializado y la experiencia de verdaderos expertos en la marca. \n\n 📊 *2. Rediseño Empresarial* Transformamos la estructura de tu negocio. Implementamos tecnología para garantizar *_la materialidad y trazabilidad de tus operaciones_*. Logramos que tu administración sea sólida y cumpla con todas las normativas fiscales actuales.\n\n 🎓 *3. Capacitación Especializada* El talento humano es _el motor de tu empresa_. Nos encargamos de entrenar a tu equipo para que *enfrenten* los retos del mercado, *dominen* las herramientas digitales y *alcancen su máximo nivel de eficiencia*."
+                'response' => "Somos especialistas en *blindar tu empresa* y asegurar que duermas tranquilo con *tu cumplimiento fiscal*, es por ello que nos especializamos en tres pilares clave:\n\n 🚀 *1. Ecosistema CONTPAQi®* Somos _Distribuidor Asociado Nivel Oro_. No solo te damos la licencia; te acompañamos en la digitalización total de tu empresa con soluciones en la nube, soporte técnico especializado y la experiencia de verdaderos expertos en la marca. \n\n 📊 *2. Rediseño Empresarial* Transformamos la estructura de tu negocio. Implementamos tecnología para garantizar *_la materialidad, trazabilidad y razón de negocio de tus operaciones_*. Logramos que tu administración sea sólida, automatizando los procesos de tu empresa, cumpliendo con las normativas fiscales actuales.\n\n 🎓 *3. Capacitación Especializada* El talento humano es _el motor de tu empresa_. Nos encargamos de entrenar a tu equipo para que *enfrenten* los retos del mercado, *dominen* las herramientas digitales y *alcancen su máximo nivel de eficiencia*."
             ],
             [
                 'keys' => ['conoce', 'Tecnologia', 'sobre'],
@@ -200,9 +200,7 @@ class WhatsAppController extends Controller
             [
                 'keys' => ['hola', 'inicio', 'buenos', 'buenas', 'menu', 'empezar'],
                 'type' => 'text',
-                'response' => "¡Hola! 👋 Bienvenido a *Tecnología Empresarial*.\n Somos tu aliado estratégico en el diseño de tu negocio para enfrentar los retos de 2026 \n ¿En qué podemos ayudarte hoy? 1. Conoce Tecnologia Empresarial
-                2. Explora nuestros servicios
-                3. Soporte Técnico \n\n_Escribe el número o el tema que te interese._"
+                'response' => "¡Hola! 👋 Bienvenido a *Tecnología Empresarial*.\n Somos tu aliado estratégico en el diseño de tu negocio para enfrentar los retos de 2026 \n ¿En qué podemos ayudarte hoy? 1. Conoce Tecnologia Empresarial2. Explora nuestros servicios3. Soporte Técnico \n\n_Escribe el número o el tema que te interese._"
             ],
             [
                 'keys' => ['gracias', 'adios', 'bye', 'hasta luego'],
