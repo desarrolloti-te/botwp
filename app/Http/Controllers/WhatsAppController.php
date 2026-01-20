@@ -273,6 +273,8 @@ class WhatsAppController extends Controller
         // ============================================
         // PASO 1: Selección de módulo
         // ============================================
+        \Log::info('📩 Valor de last_bot_question', $lastQuestion);
+
         if ($lastQuestion === 'contpaqi_modulo') {
             $modulo = '';
             
