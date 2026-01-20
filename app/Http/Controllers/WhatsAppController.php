@@ -296,7 +296,7 @@ class WhatsAppController extends Controller
             } elseif (str_contains($text, 'comerc') || str_contains($text, 'factur') || str_contains($text, 'inventario') || str_contains($text, '3')) {
                 $modulo = 'Comercial';
                 $nextQuestion = 'contpaqi_detalle_comercial';
-                $message = "🏪 *CONTPAQi Comercial* - Perfecta elección.\n\nTe permite:\n✅ Facturación electrónica 4.0\n✅ Control total de inventarios\n✅ Cuentas por cobrar/pagar\n✅ Múltiples almacenes\n\n¿Manejas inventarios, servicios o ambos?";
+                $message = "🏪 *CONTPAQi Comercial* - Perfecta .\n\nTe permite:\n✅ Facturación electrónica 4.0\n✅ Control total de inventarios\n✅ Cuentas por cobrar/pagar\n✅ Múltiples almacenes\n\n¿Manejas inventarios, servicios o ambos?";
             } elseif (str_contains($text, 'banco') || str_contains($text, 'tesorer') || str_contains($text, '4')) {
                 $modulo = 'Bancos';
                 $nextQuestion = 'contpaqi_detalle_bancos';
