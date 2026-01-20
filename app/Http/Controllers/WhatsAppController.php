@@ -47,8 +47,6 @@ class WhatsAppController extends Controller
             ['user_number' => $from],
             ['status' => 'open', 'context' => 'INITIAL', 'conversation_history' => json_encode([])]
         );
-                \Log::info('📩 Valor de context', $chat->context);
-
 
         // Guardar historial de conversación
         $this->updateConversationHistory($chat, $text, 'user');
@@ -251,7 +249,7 @@ class WhatsAppController extends Controller
             $metadata = ['modulo_interes' => 'Comercial'];
             $chat->update(['metadata' => json_encode($metadata)]);
             
-            $this->sendMessage($from, $intro . "🏪 *CONTPAQi Comercial* - buenasasasasas elección.\n\nTe permite:\n✅ Facturación electrónica 4.0\n✅ Control total de inventarios\n✅ Cuentas por cobrar/pagar\n✅ Múltiples almacenes\n\n¿Manejas inventarios, servicios o ambos?");
+            $this->sendMessage($from, $intro . "🏪 *CONTPAQi Comercial* - Perfecta elección.\n\nTe permite:\n✅ Facturación electrónica 4.0\n✅ Control total de inventarios\n✅ Cuentas por cobrar/pagar\n✅ Múltiples almacenes\n\n¿Manejas inventarios, servicios o ambos?");
         } elseif (str_contains($text, 'banco') || str_contains($text, 'tesorer')) {
             $chat->update(['last_bot_question' => 'contpaqi_detalle_bancos']);
             $metadata = ['modulo_interes' => 'Bancos'];
@@ -275,8 +273,6 @@ class WhatsAppController extends Controller
         // ============================================
         // PASO 1: Selección de módulo
         // ============================================
-        \Log::info('📩 Valor de last_bot_question', $lastQuestion);
-
         if ($lastQuestion === 'contpaqi_modulo') {
             $modulo = '';
             
