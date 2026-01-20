@@ -45,28 +45,7 @@ class WhatsAppController extends Controller
             ['status' => 'open', 'context' => 'START']
         );
 
-        if (in_array($text, ['hola', 'menu', 'inicio', 'empezar'])) {
-            $chat->update(['context' => 'START']);
-
-            return $this->handleStartFlow($chat, $from, $text);
-        }
-
-        // Procesar según el contexto actual
-        return match ($chat->context) {
-            'START' => $this->handleStartFlow($chat, $from, $text),
-            'SERVICES' => $this->handleServicesFlow($chat, $from, $text),
-            'SUPPORT' => $this->handleSupportFlow($chat, $from, $text),
-            'QUOTE' => $this->handleQuoteFlow($chat, $from, $text),
-            default => $this->handleStartFlow($chat, $from, $text),
-        };
-
-        // if (in_array($text, ['hola', 'menu'])) {
-        //     $chat->update(['context' => 'START']);
-        //     return $this->handleStartFlow($chat, $from, $text);
-        // }
-
         $isHumanRequest = in_array($text, ['asesor', 'humano', 'agente']);
-
         Message::create([
             'chat_id' => $chat->id,
             'message' => $text,
@@ -75,12 +54,63 @@ class WhatsAppController extends Controller
         ]);
 
         if ($isHumanRequest) {
-            $this->sendMessage($from,
-                "👨‍💻 Un asesor humano fue notificado.\nEn breve te atenderemos."
-            );
-
+            $chat->update(['context' => 'HUMAN_SUPPORT']); // Pausar el bot
+            $this->sendMessage($from, "👨‍💻 Un asesor humano ha sido notificado. En breve te atenderá personalmente.");
             return response()->json(['status' => 'ok']);
         }
+
+        if (in_array($text, ['hola', 'menu', 'inicio', 'empezar'])) {
+            $chat->update(['context' => 'START']);
+            return $this->handleStartFlow($chat, $from, $text);
+        }
+
+        if ($chat->context === 'QUOTE_WAITING_EMAIL') {
+            return $this->handleQuoteFlow($chat, $from, $text);
+        }
+        if ($chat->context === 'SUPPORT_WAITING_TICKET') {
+            return $this->handleSupportFlow($chat, $from, $text);
+        }
+
+       
+        return match ($chat->context) {
+            'START' => $this->handleStartFlow($chat, $from, $text), // Maneja opciones 1, 2, 3
+            'SERVICES' => $this->handleServicesFlow($chat, $from, $text),
+            'QUOTE' => $this->handleQuoteFlow($chat, $from, $text),
+        };
+        
+        $catalogResponse = $this->findResponseInCatalog($text);
+
+        if ($catalogResponse !== null) {
+            // ¡Entendimos lo que dijo! Respondemos directamente.
+            
+            // Enviamos la respuesta según el tipo
+            switch ($catalogResponse['type']) {
+                case 'image':
+                    $this->sendImage($from, $catalogResponse['url'], $catalogResponse['caption'] ?? '');
+                    break;
+                case 'video':
+                    $this->sendVideo($from, $catalogResponse['url'], $catalogResponse['caption'] ?? '');
+                    break;
+                case 'document':
+                    $this->sendDocument($from, $catalogResponse['url'], $catalogResponse['filename'] ?? 'documento.pdf');
+                    break;
+                default: // text
+                    $this->sendMessage($from, $catalogResponse['response']);
+                    break;
+            }
+
+            // Opcional: Si es una respuesta informativa, regresamos el contexto a START suavemente
+            // para que si escribe "1" después, funcione el menú.
+            $chat->update(['context' => 'START']); 
+            
+            return response()->json(['status' => 'ok']);
+        }
+
+        // if (in_array($text, ['hola', 'menu'])) {
+        //     $chat->update(['context' => 'START']);
+        //     return $this->handleStartFlow($chat, $from, $text);
+        // }
+
 
         if ($text === '/agente' && in_array($from, config('services.whatsapp.agent_numbers'))) {
             // Obtener todos los mensajes pendientes
@@ -125,7 +155,6 @@ class WhatsAppController extends Controller
                 return response()->json(['status' => 'ok']);
             }
 
-            // Guardar respuesta del agente
             Message::create([
                 'chat_id' => $msg->chat->id,
                 'message' => $replyText,
@@ -144,31 +173,6 @@ class WhatsAppController extends Controller
             );
 
             return response()->json(['status' => 'ok']);
-        }
-
-        // match ($text) {
-        //     'hola' => $this->sendMessage($from, '¡Hola! 👋 ¿En qué puedo ayudarte?'),
-        //     'info' => $this->sendMessage($from, 'Somos una empresa que ofrece servicios.'),
-        //     default => $this->sendMessage($from, 'No entendí tu mensaje 😅. Escribe *hola* o *info*.'),
-        // };
-
-        $item = $this->findResponseInCatalog($text);
-
-        switch ($item['type']) {
-            case 'text':
-                $this->sendMessage($from, $item['response']);
-                break;
-            case 'image':
-                $this->sendImage($from, $item['url'], $item['caption'] ?? null);
-                break;
-            case 'video':
-                $this->sendVideo($from, $item['url'], $item['caption'] ?? null);
-                break;
-            case 'document':
-                $this->sendDocument($from, $item['url'], $item['filename'] ?? null);
-                break;
-            default:
-                $this->sendMessage($from, '👋 No entendí tu mensaje.');
         }
 
         return response()->json(['status' => 'ok']);
