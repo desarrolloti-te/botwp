@@ -108,7 +108,8 @@ class WhatsAppController extends Controller
         }
 
         // 4. Buscar en el catálogo de respuestas rápidas SOLO si no hay contexto activo
-        $catalogResponse = $this->findResponseInCatalog($text);
+        // IMPORTANTE: Pasar el contexto actual para evitar conflictos
+        $catalogResponse = $this->findResponseInCatalog($text, $currentContext);
         
         if ($catalogResponse !== null && $catalogResponse['type'] !== 'fallback') {
             // Actualizar contexto basado en la respuesta
@@ -727,7 +728,221 @@ class WhatsAppController extends Controller
             ]);
     }
 
-    private function findResponseInCatalog(string $input): ?array
+    private function findResponseInCatalog(string $input, $currentContext = null): ?array
+    {
+        $catalog = [
+            // SALUDOS Y BIENVENIDA
+            [
+                'keys' => ['hola', 'inicio', 'buenos', 'buenas', 'menu', 'empezar'],
+                'type' => 'greeting',
+                'response' => '',
+                'context' => 'START',
+                'skip_in_contexts' => [], // Nunca skipear saludos
+            ],
+            
+            // INFORMACIÓN GENERAL
+            [
+                'keys' => ['quienes son', 'que hacen', 'sobre ustedes', 'empresa'],
+                'type' => 'text',
+                'response' => "Somos *Tecnología Empresarial*, consultores especializados con 30 años de experiencia, liderados por la L.C.P. Verónica De León.\n\n🎯 *Nuestra misión:* Blindar tu empresa y garantizar tu cumplimiento fiscal mediante:\n\n🚀 Tecnología de vanguardia\n📊 Automatización de procesos\n🎓 Capacitación especializada\n\n¿Te gustaría conocer nuestros servicios específicos?",
+                'context' => 'INFO',
+                'skip_in_contexts' => [],
+            ],
+            
+            // NUBE Y ESCRITORIOS VIRTUALES
+            [
+                'keys' => ['nube', 'escritorio', 'virtual', 'servidor', 'hosting', 'cloud'],
+                'type' => 'text',
+                'response' => "☁️ *Escritorios Virtuales en la Nube*\n\n¡Lleva tu oficina a cualquier lugar! Olvídate de:\n\n❌ Servidores físicos costosos\n❌ Fallas de luz que detienen tu operación\n❌ Mantenimientos complejos\n❌ Pérdida de información\n\n✅ Acceso 24/7 desde cualquier dispositivo\n✅ Respaldos automáticos diarios\n✅ Máxima seguridad\n✅ Soporte técnico incluido\n\n¿Te gustaría conocer nuestros planes?",
+                'context' => 'NUBE',
+                'next_question' => 'nube_planes',
+                'skip_in_contexts' => ['NUBE'], // No repetir si ya estamos en NUBE
+            ],
+            
+            // REDISEÑO Y BLINDAJE
+            [
+                'keys' => ['rediseño', 'rediseno', 'blindaje', 'fiscal', 'materialidad', 'automatizacion'],
+                'type' => 'text',
+                'response' => "🛡️ *Rediseño Empresarial 360°*\n\nNo solo implementamos software, transformamos tu empresa para que esté blindada ante el SAT.\n\n🎯 Garantizamos:\n• *Materialidad* de operaciones\n• *Trazabilidad* completa\n• *Razón de negocio* justificada\n\nTransformamos tu administración en un sistema sólido, automatizado y cumplidor.\n\n¿Te gustaría un diagnóstico sin costo?",
+                'context' => 'REDISEÑO',
+                'skip_in_contexts' => ['REDISEÑO'],
+            ],
+            
+            // CAPACITACIÓN
+            [
+                'keys' => ['capacitacion', 'curso', 'taller', 'entrenamiento', 'aprender'],
+                'type' => 'text',
+                'response' => "🎓 *Capacitación Empresarial Especializada*\n\nEl software no comete errores, las personas sí. Por eso capacitamos a tu equipo para alcanzar su máximo nivel de eficiencia.\n\n📚 Cursos disponibles:\n• CONTPAQi (todos los módulos)\n• Excel Empresarial\n• Fiscales y tributarios\n• Administración\n\n🏆 Certificados con validez STPS\n\n¿Qué curso necesita tu equipo?",
+                'context' => 'CAPACITACION',
+                'skip_in_contexts' => ['CAPACITACION'],
+            ],
+            
+            // SOPORTE TÉCNICO
+            [
+                'keys' => ['soporte', 'ayuda', 'tecnico', 'falla', 'problema', 'error'],
+                'type' => 'text',
+                'response' => "🛠️ *Soporte Técnico Especializado*\n\nEntendemos que tu operación no puede detenerse.\n\n¿Qué necesitas?\n1️⃣ Reportar nueva falla\n2️⃣ Consultar ticket existente\n3️⃣ Preguntas frecuentes\n\nEscribe el número o describe tu problema directamente.",
+                'context' => 'SOPORTE',
+                'skip_in_contexts' => ['SOPORTE'],
+            ],
+            
+            // PRECIOS Y COTIZACIONES
+            [
+                'keys' => ['precio', 'costo', 'cuanto', 'cotizacion', 'cotización'],
+                'type' => 'text',
+                'response' => "💰 Cada empresa es única y merece una solución personalizada.\n\nPara brindarte un precio justo necesitamos conocer:\n• Tamaño de tu empresa\n• Servicios específicos que requieres\n• Número de usuarios\n\n¿Te gustaría que un asesor comercial prepare tu cotización personalizada? Escribe *'Sí'* o *'Cotización'*",
+                'context' => 'QUOTE',
+                'skip_in_contexts' => ['CONTPAQI', 'NUBE', 'REDISEÑO'], // No usar si ya estamos en contexto específico
+            ],
+            
+            // MÓDULOS ESPECÍFICOS - SOLO SI NO ESTAMOS EN CONTEXTO CONTPAQI
+            [
+                'keys' => ['contabilidad', 'contable'],
+                'type' => 'text',
+                'response' => "📊 *CONTPAQi Contabilidad*\n\nEl sistema líder en México para control fiscal y financiero.\n\n✅ Contabilidad electrónica\n✅ Pólizas automáticas\n✅ Estados financieros en tiempo real\n✅ Cumplimiento SAT garantizado\n✅ Integración bancaria\n\n¿Necesitas implementación, actualización o capacitación?",
+                'context' => 'CONTPAQI',
+                'skip_in_contexts' => ['CONTPAQI'], // CRÍTICO: No usar si ya estamos en CONTPAQI
+            ],
+            
+            [
+                'keys' => ['nomina', 'nominas', 'empleados', 'rrhh'],
+                'type' => 'text',
+                'response' => "👥 *CONTPAQi Nóminas*\n\nGestiona tu capital humano sin errores.\n\n✅ Cálculo automático de nómina\n✅ Timbrado CFDI\n✅ IMSS e Infonavit\n✅ Finiquitos y liquidaciones\n✅ Reportes ejecutivos\n\n¿Cuántos empleados tiene tu empresa?",
+                'context' => 'CONTPAQI',
+                'skip_in_contexts' => ['CONTPAQI'],
+            ],
+            
+            [
+                'keys' => ['comercial', 'facturacion', 'inventario', 'ventas'],
+                'type' => 'text',
+                'response' => "🏪 *CONTPAQi Comercial*\n\nControla tu operación comercial completa.\n\n✅ Facturación electrónica 4.0\n✅ Control de inventarios\n✅ Cuentas por cobrar/pagar\n✅ Punto de venta\n✅ Múltiples almacenes\n\n¿Manejas inventarios o solo servicios?",
+                'context' => 'CONTPAQI',
+                'skip_in_contexts' => ['CONTPAQI'], // CRÍTICO: No usar si ya estamos en CONTPAQI
+            ],
+            
+            [
+                'keys' => ['bancos', 'tesoreria', 'conciliacion'],
+                'type' => 'text',
+                'response' => "🏦 *CONTPAQi Bancos*\n\nConecta tus bancos con tu contabilidad automáticamente.\n\n✅ Conciliación bancaria automática\n✅ Flujo de efectivo en tiempo real\n✅ Pagos electrónicos\n✅ Proyecciones financieras\n\nElimina la talacha manual y ten control total. 💸",
+                'context' => 'CONTPAQI',
+                'skip_in_contexts' => ['CONTPAQI'],
+            ],
+            
+            // SECTORES
+            [
+                'keys' => ['petrolero', 'energia', 'gas', 'petroleo'],
+                'type' => 'text',
+                'response' => "🛢️ Tenemos amplia experiencia en el sector *Petrolero y Energético*.\n\nSabemos manejar:\n• Altos volúmenes de operación\n• Requisitos fiscales específicos\n• Normativas del sector\n• Trazabilidad completa\n\n¿Qué tipo de operación realizas?",
+                'context' => 'REDISEÑO',
+                'skip_in_contexts' => [],
+            ],
+            
+            [
+                'keys' => ['construccion', 'obra', 'constructor'],
+                'type' => 'text',
+                'response' => "🏗️ Especializados en el sector *Construcción*.\n\n✅ Control de obras y proyectos\n✅ Presupuestos vs real\n✅ Subcontratistas\n✅ Materiales y mano de obra\n✅ Deducción correcta de gastos\n\nIntegramos todo con tu contabilidad para evitar desvíos.",
+                'context' => 'REDISEÑO',
+                'skip_in_contexts' => [],
+            ],
+            
+            // CONTACTO Y CITAS
+            [
+                'keys' => ['cita', 'reunion', 'agendar', 'visita', 'demo'],
+                'type' => 'text',
+                'response' => "🗓️ *¡Perfecto! Agendemos una sesión.*\n\n¿Qué prefieres?\n1️⃣ Cita presencial en tu empresa\n2️⃣ Videollamada por Zoom\n3️⃣ Llamada telefónica\n\nEscribe el número de tu preferencia.",
+                'context' => 'QUOTE',
+                'skip_in_contexts' => [],
+            ],
+            
+            [
+                'keys' => ['telefono', 'llamar', 'celular', 'contacto'],
+                'type' => 'text',
+                'response' => "📞 *Contáctanos:*\n\nTeléfono: [Tu número]\nHorario: Lunes a Viernes 9:00 AM - 6:00 PM\n\n¿Prefieres que te llamemos nosotros? Escribe *'Sí'* y tu nombre completo.",
+                'context' => 'QUOTE',
+                'skip_in_contexts' => [],
+            ],
+            
+            [
+                'keys' => ['ubicacion', 'direccion', 'donde', 'oficina'],
+                'type' => 'text',
+                'response' => "📍 *Nuestra ubicación:*\n\n[Tu dirección completa]\n\nSi requieres una visita presencial o consultoría en sitio, escribe *'Cita'* para coordinar.",
+                'context' => 'INFO',
+                'skip_in_contexts' => [],
+            ],
+            
+            // URGENCIAS Y ALERTAS
+            [
+                'keys' => ['urgente', 'rapido', 'inmediato', 'ya'],
+                'type' => 'text',
+                'response' => "⚡ Entiendo la urgencia.\n\n¿Es un problema técnico o comercial?\n\n• Si es *técnico* → Escribe 'Soporte'\n• Si es *comercial* → Escribe 'Asesor'\n\nUn ejecutivo te atenderá de inmediato.",
+                'context' => 'SUPPORT',
+                'skip_in_contexts' => [],
+            ],
+            
+            [
+                'keys' => ['sat', 'auditoria', 'revision', 'fiscalizacion'],
+                'type' => 'text',
+                'response' => "🚨 *Alerta SAT*\n\nSi estás bajo revisión fiscal:\n\n1. No esperes - actúa ahora\n2. Necesitas evidencia digital\n3. Materialidad de operaciones\n\nNuestro servicio de blindaje preventivo puede ayudarte.\n\nEscribe *'Urgente'* para atención inmediata.",
+                'context' => 'REDISEÑO',
+                'skip_in_contexts' => [],
+            ],
+            
+            // DESPEDIDAS
+            [
+                'keys' => ['gracias', 'adios', 'bye', 'hasta luego', 'nos vemos'],
+                'type' => 'text',
+                'response' => "¡Gracias a ti! 🙏\n\nEstamos aquí para blindar tu operación 24/7.\n\nSi necesitas algo más, solo escríbeme. ¡Hasta pronto! 🚀",
+                'context' => 'START',
+                'skip_in_contexts' => [],
+            ],
+            
+            // MULTIMEDIA
+            [
+                'keys' => ['foto', 'imagen', 'ver producto'],
+                'type' => 'image',
+                'url' => 'https://botwp.tecnologiaempresarial.mx/images/XPLUS.png',
+                'caption' => '📸 Nuestras soluciones empresariales',
+                'context' => 'INFO',
+                'skip_in_contexts' => [],
+            ],
+            
+            [
+                'keys' => ['video', 'demostracion', 'demo visual'],
+                'type' => 'video',
+                'url' => 'https://botwp.tecnologiaempresarial.mx/videos/XPLUS.mp4',
+                'caption' => '🎥 Mira cómo transformamos empresas',
+                'context' => 'INFO',
+                'skip_in_contexts' => [],
+            ],
+            
+            [
+                'keys' => ['catalogo', 'pdf', 'documento', 'brochure'],
+                'type' => 'document',
+                'url' => 'https://botwp.tecnologiaempresarial.mx/docs/XPLUS.pdf',
+                'filename' => 'Catalogo_Tecnologia_Empresarial_2026.pdf',
+                'context' => 'INFO',
+                'skip_in_contexts' => [],
+            ],
+        ];
+
+        // Buscar coincidencias en el catálogo
+        foreach ($catalog as $item) {
+            // Si estamos en un contexto que debe skipear esta entrada, continuar
+            if (isset($item['skip_in_contexts']) && 
+                in_array($currentContext, $item['skip_in_contexts'])) {
+                continue;
+            }
+            
+            foreach ($item['keys'] as $keyword) {
+                if (str_contains($input, $keyword)) {
+                    return $item;
+                }
+            }
+        }
+
+        // Si no encuentra nada, retorna tipo fallback
+        return ['type' => 'fallback'];
+    }
     {
         $catalog = [
             // SALUDOS Y BIENVENIDA
