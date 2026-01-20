@@ -97,7 +97,17 @@ class WhatsAppController extends Controller
             return $this->handleInitialGreeting($chat, $from);
         }
 
-        // 3. Buscar en el catálogo de respuestas rápidas
+        // 3. PRIORIDAD: Si estamos en un contexto específico, procesar PRIMERO dentro de ese contexto
+        $currentContext = $chat->context ?? 'INITIAL';
+        
+        if ($currentContext !== 'INITIAL' && $currentContext !== 'START') {
+            $contextualResponse = $this->handleContextualMessage($chat, $from, $text, $currentContext);
+            if ($contextualResponse !== null) {
+                return $contextualResponse;
+            }
+        }
+
+        // 4. Buscar en el catálogo de respuestas rápidas SOLO si no hay contexto activo
         $catalogResponse = $this->findResponseInCatalog($text);
         
         if ($catalogResponse !== null && $catalogResponse['type'] !== 'fallback') {
@@ -105,17 +115,6 @@ class WhatsAppController extends Controller
             $this->updateContextFromResponse($chat, $catalogResponse);
             
             return $this->sendCatalogResponse($from, $catalogResponse, $chat);
-        }
-
-        // 4. Análisis de intención basado en contexto actual
-        $currentContext = $chat->context ?? 'INITIAL';
-        
-        // Si estamos en un contexto específico, intentar entender dentro de ese contexto
-        if ($currentContext !== 'INITIAL' && $currentContext !== 'START') {
-            $contextualResponse = $this->handleContextualMessage($chat, $from, $text, $currentContext);
-            if ($contextualResponse !== null) {
-                return $contextualResponse;
-            }
         }
 
         // 5. Buscar en otros contextos si no hay match en el actual
@@ -185,7 +184,7 @@ class WhatsAppController extends Controller
         if ($lastQuestion === 'contpaqi_modulo') {
             $modulo = '';
             if (str_contains($text, 'contab')) $modulo = 'Contabilidad';
-            elseif (str_contains($text, 'nomin')) $modulo = 'Nominas';
+            elseif (str_contains($text, 'nomin')) $modulo = 'Nóminas';
             elseif (str_contains($text, 'comerc')) $modulo = 'Comercial';
             elseif (str_contains($text, 'banco')) $modulo = 'Bancos';
             elseif (str_contains($text, 'todo') || str_contains($text, 'todos')) $modulo = 'Suite Completa';
@@ -197,7 +196,7 @@ class WhatsAppController extends Controller
                 
                 $responses = [
                     'Contabilidad' => "📊 *CONTPAQi Contabilidad* - Excelente elección.\n\nPerfecto para:\n✅ Control fiscal total\n✅ Contabilidad electrónica SAT\n✅ Estados financieros automáticos\n✅ Pólizas automatizadas\n\n¿Necesitas implementación nueva, actualización o migración desde otro sistema?",
-                    'Nominas' => "👥 *CONTPAQi Nóminas* - La mejor decisión.\n\nIdeal para:\n✅ Cálculo automático de nómina\n✅ Timbrado CFDI 4.0\n✅ IMSS, Infonavit, ISR\n✅ Finiquitos y liquidaciones\n\n¿Cuántos empleados tienes actualmente?",
+                    'Nóminas' => "👥 *CONTPAQi Nóminas* - La mejor decisión.\n\nIdeal para:\n✅ Cálculo automático de nómina\n✅ Timbrado CFDI 4.0\n✅ IMSS, Infonavit, ISR\n✅ Finiquitos y liquidaciones\n\n¿Cuántos empleados tienes actualmente?",
                     'Comercial' => "🏪 *CONTPAQi Comercial* - Perfecta elección.\n\nTe permite:\n✅ Facturación electrónica 4.0\n✅ Control total de inventarios\n✅ Cuentas por cobrar/pagar\n✅ Múltiples almacenes\n\n¿Manejas inventarios, servicios o ambos?",
                     'Bancos' => "🏦 *CONTPAQi Bancos* - Excelente.\n\nBeneficios:\n✅ Conciliación bancaria automática\n✅ Flujo de efectivo en tiempo real\n✅ Control de cheques\n✅ Pagos electrónicos\n\n¿Con cuántos bancos trabajas?",
                     'Suite Completa' => "🎯 *Suite Completa CONTPAQi* - La solución integral.\n\nIncluye:\n✅ Contabilidad\n✅ Nóminas\n✅ Comercial\n✅ Bancos\n\nTodo integrado automáticamente. ¿Cuántos usuarios necesitas?"
@@ -210,7 +209,7 @@ class WhatsAppController extends Controller
         }
         
         // Seguimiento específico de Nóminas - preguntamos empleados
-        if ($lastQuestion === 'contpaqi_detalle_nominas') {
+        if ($lastQuestion === 'contpaqi_detalle_nóminas') {
             preg_match('/\d+/', $text, $matches);
             $empleados = $matches[0] ?? null;
             
@@ -240,7 +239,7 @@ class WhatsAppController extends Controller
             } elseif (str_contains($text, 'servicio')) {
                 $this->sendMessage($from, "Ideal para empresas de servicios. 💼\n\nLa versión para servicios es más simple y económica.\n\n¿Te gustaría ver precios o una demo?");
                 $chat->update(['last_bot_question' => 'contpaqi_siguiente_paso']);
-            } elseif (str_contains($text, 'ambos' ) || str_contains($text, 'Ambos') || str_contains($text, 'dos') || str_contains($text, '2')) {
+            } elseif (str_contains($text, 'ambos')) {
                 $this->sendMessage($from, "Entiendo, negocio híbrido. Necesitas la versión completa.\n\n¿Aproximadamente cuántos productos manejas en inventario?");
                 $chat->update(['last_bot_question' => 'contpaqi_inventario_size']);
             }
@@ -397,6 +396,12 @@ class WhatsAppController extends Controller
 
     private function detectContextFromMessage($text)
     {
+        // Detección específica de CONTPAQi
+        if (str_contains($text, 'contpaqi') || str_contains($text, 'conpaq') || 
+            (str_contains($text, 'sistema') && str_contains($text, 'administrativo'))) {
+            return 'CONTPAQI';
+        }
+        
         foreach ($this->conversationContexts as $context => $keywords) {
             foreach ($keywords as $keyword) {
                 if (str_contains($text, $keyword)) {
@@ -412,7 +417,7 @@ class WhatsAppController extends Controller
     {
         // Transición suave de contexto
         $transitions = [
-            'CONTPAQI' => "Entiendo que te interesa *CONTPAQi*. 🎯\n\nSomos Socios Máster con 30 años implementando soluciones administrativas. ¿Te gustaría conocer sobre licencias, funcionalidades o precios?",
+            'CONTPAQI' => "Entiendo que te interesa *CONTPAQi*. 🎯\n\nSomos Socios Máster Nivel Oro con 30 años implementando soluciones administrativas.\n\n¿Qué módulo te interesa?\n\n1️⃣ Contabilidad\n2️⃣ Nóminas\n3️⃣ Comercial\n4️⃣ Bancos\n5️⃣ Suite completa\n\nEscribe el número o nombre del módulo.",
             'NUBE' => "¡Excelente elección! ☁️\n\nNuestros *Escritorios Virtuales* transformarán tu forma de trabajar. ¿Quieres conocer los beneficios, planes o ver una demo?",
             'REDISEÑO' => "Perfecto, hablemos de *Rediseño Empresarial*. 🛡️\n\nNo solo implementamos software, reestructuramos tu operación completa. ¿Te interesa saber cómo funciona el proceso?",
             'CAPACITACION' => "¡Invertir en tu equipo es la mejor decisión! 🎓\n\n¿Buscas cursos de CONTPAQi, Excel, Fiscales o certificaciones STPS?",
@@ -420,6 +425,12 @@ class WhatsAppController extends Controller
         ];
         
         $message = $transitions[$newContext] ?? "Entiendo tu interés. ¿Cómo puedo ayudarte específicamente?";
+        
+        // Establecer next_question para CONTPAQi
+        if ($newContext === 'CONTPAQI') {
+            $chat->update(['last_bot_question' => 'contpaqi_modulo']);
+        }
+        
         $this->sendMessage($from, $message);
         
         return response()->json(['status' => 'ok']);
@@ -729,19 +740,10 @@ class WhatsAppController extends Controller
             
             // INFORMACIÓN GENERAL
             [
-                'keys' => ['quienes son', 'que hacen', 'sobre ustedes', 'conocer'],
+                'keys' => ['quienes son', 'que hacen', 'sobre ustedes', 'empresa'],
                 'type' => 'text',
                 'response' => "Somos *Tecnología Empresarial*, consultores especializados con 30 años de experiencia, liderados por la L.C.P. Verónica De León.\n\n🎯 *Nuestra misión:* Blindar tu empresa y garantizar tu cumplimiento fiscal mediante:\n\n🚀 Tecnología de vanguardia\n📊 Automatización de procesos\n🎓 Capacitación especializada\n\n¿Te gustaría conocer nuestros servicios específicos?",
                 'context' => 'INFO',
-            ],
-            
-            // CONTPAQI
-            [
-                'keys' => ['contpaqi', 'sistema', 'programa', 'software administrativo'],
-                'type' => 'text',
-                'response' => "💼 Somos *Socios Máster CONTPAQi®* - Nivel Oro.\n\nNo solo vendemos licencias, te acompañamos en la transformación digital completa de tu empresa.\n\n✅ Implementación personalizada\n✅ Migración de datos\n✅ Capacitación del equipo\n✅ Soporte técnico especializado\n\n¿Qué módulo te interesa? (Contabilidad, Nóminas, Comercial, etc.)",
-                'context' => 'CONTPAQI',
-                'next_question' => 'contpaqi_modulo',
             ],
             
             // NUBE Y ESCRITORIOS VIRTUALES
