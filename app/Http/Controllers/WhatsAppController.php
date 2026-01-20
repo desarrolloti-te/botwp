@@ -185,7 +185,7 @@ class WhatsAppController extends Controller
         if ($lastQuestion === 'contpaqi_modulo') {
             $modulo = '';
             if (str_contains($text, 'contab')) $modulo = 'Contabilidad';
-            elseif (str_contains($text, 'nomin')) $modulo = 'Nóminas';
+            elseif (str_contains($text, 'nomin')) $modulo = 'Nominas';
             elseif (str_contains($text, 'comerc')) $modulo = 'Comercial';
             elseif (str_contains($text, 'banco')) $modulo = 'Bancos';
             elseif (str_contains($text, 'todo') || str_contains($text, 'todos')) $modulo = 'Suite Completa';
@@ -197,7 +197,7 @@ class WhatsAppController extends Controller
                 
                 $responses = [
                     'Contabilidad' => "📊 *CONTPAQi Contabilidad* - Excelente elección.\n\nPerfecto para:\n✅ Control fiscal total\n✅ Contabilidad electrónica SAT\n✅ Estados financieros automáticos\n✅ Pólizas automatizadas\n\n¿Necesitas implementación nueva, actualización o migración desde otro sistema?",
-                    'Nóminas' => "👥 *CONTPAQi Nóminas* - La mejor decisión.\n\nIdeal para:\n✅ Cálculo automático de nómina\n✅ Timbrado CFDI 4.0\n✅ IMSS, Infonavit, ISR\n✅ Finiquitos y liquidaciones\n\n¿Cuántos empleados tienes actualmente?",
+                    'Nominas' => "👥 *CONTPAQi Nóminas* - La mejor decisión.\n\nIdeal para:\n✅ Cálculo automático de nómina\n✅ Timbrado CFDI 4.0\n✅ IMSS, Infonavit, ISR\n✅ Finiquitos y liquidaciones\n\n¿Cuántos empleados tienes actualmente?",
                     'Comercial' => "🏪 *CONTPAQi Comercial* - Perfecta elección.\n\nTe permite:\n✅ Facturación electrónica 4.0\n✅ Control total de inventarios\n✅ Cuentas por cobrar/pagar\n✅ Múltiples almacenes\n\n¿Manejas inventarios, servicios o ambos?",
                     'Bancos' => "🏦 *CONTPAQi Bancos* - Excelente.\n\nBeneficios:\n✅ Conciliación bancaria automática\n✅ Flujo de efectivo en tiempo real\n✅ Control de cheques\n✅ Pagos electrónicos\n\n¿Con cuántos bancos trabajas?",
                     'Suite Completa' => "🎯 *Suite Completa CONTPAQi* - La solución integral.\n\nIncluye:\n✅ Contabilidad\n✅ Nóminas\n✅ Comercial\n✅ Bancos\n\nTodo integrado automáticamente. ¿Cuántos usuarios necesitas?"
@@ -210,7 +210,7 @@ class WhatsAppController extends Controller
         }
         
         // Seguimiento específico de Nóminas - preguntamos empleados
-        if ($lastQuestion === 'contpaqi_detalle_nóminas') {
+        if ($lastQuestion === 'contpaqi_detalle_nominas') {
             preg_match('/\d+/', $text, $matches);
             $empleados = $matches[0] ?? null;
             
@@ -240,7 +240,7 @@ class WhatsAppController extends Controller
             } elseif (str_contains($text, 'servicio')) {
                 $this->sendMessage($from, "Ideal para empresas de servicios. 💼\n\nLa versión para servicios es más simple y económica.\n\n¿Te gustaría ver precios o una demo?");
                 $chat->update(['last_bot_question' => 'contpaqi_siguiente_paso']);
-            } elseif (str_contains($text, 'ambos')) {
+            } elseif (str_contains($text, 'ambos' ) || str_contains($text, 'Ambos') || str_contains($text, 'dos') || str_contains($text, '2')) {
                 $this->sendMessage($from, "Entiendo, negocio híbrido. Necesitas la versión completa.\n\n¿Aproximadamente cuántos productos manejas en inventario?");
                 $chat->update(['last_bot_question' => 'contpaqi_inventario_size']);
             }
