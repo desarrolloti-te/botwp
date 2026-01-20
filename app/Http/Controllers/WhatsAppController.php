@@ -329,7 +329,7 @@ class WhatsAppController extends Controller
                 'response' => "Somos *Socios Máster* con 30 años de experiencia. 🏅 Implementamos, configuramos y damos soporte a toda la suite CONTPAQi.\n¿Buscas una licencia nueva o renovar?",
             ],
             [
-                'keys' => ['nube', 'escritorio', 'virtual', 'remoto', 'vdi'],
+                'keys' => ['nube', 'escritorio', 'virtual', 'remoto', 'vdi', 'escritorios virtuales'],
                 'type' => 'text',
                 'response' => '☁️ *¡Lleva tu oficina a cualquier lugar!* Con nuestros Escritorios Virtuales olvídate de servidores físicos, fallas de luz y mantenimientos. Tu información segura y respaldada diariamente. ¿Te interesa ver los paquetes?',
             ],
