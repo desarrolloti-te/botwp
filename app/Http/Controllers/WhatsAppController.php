@@ -47,6 +47,8 @@ class WhatsAppController extends Controller
             ['user_number' => $from],
             ['status' => 'open', 'context' => 'INITIAL', 'conversation_history' => json_encode([])]
         );
+                \Log::info('📩 Valor de context', $chat->context);
+
 
         // Guardar historial de conversación
         $this->updateConversationHistory($chat, $text, 'user');
