@@ -306,6 +306,7 @@ class WhatsAppController extends Controller
                 $nextQuestion = 'contpaqi_usuarios';
                 $message = "🎯 *Suite Completa CONTPAQi* - La solución integral.\n\nIncluye:\n✅ Contabilidad\n✅ Nóminas\n✅ Comercial\n✅ Bancos\n\nTodo integrado automáticamente. ¿Cuántos usuarios necesitas?";
             } else {
+
                 $this->sendMessage($from, "No estoy seguro de entender. Por favor elige uno de estos módulos:\n\n📊 Contabilidad\n👥 Nóminas\n🏪 Comercial\n🏦 Bancos\n🎯 Suite completa");
 
                 return response()->json(['status' => 'ok']);
