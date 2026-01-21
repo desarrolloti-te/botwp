@@ -34,6 +34,14 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    'huggingface' => [
+        'api_key' => env('HUGGINGFACE_API_KEY'),
+        // Modelos recomendados (ordenados por calidad):
+        // 'model' => 'meta-llama/Llama-3.2-3B-Instruct', // Mejor para conversaciones naturales
+        // 'model' => 'mistralai/Mistral-7B-Instruct-v0.3', // Alternativa excelente
+        // 'model' => 'microsoft/Phi-3-mini-4k-instruct', // Más rápido, buena calidad
+        'model' => env('HUGGINGFACE_MODEL', 'meta-llama/Llama-3.2-3B-Instruct'),
+    ],
     'whatsapp' => [
         'token' => env('WHATSAPP_TOKEN'),
         'phone_id' => env('WHATSAPP_PHONE_ID'),

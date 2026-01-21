@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Chat;
 use App\Models\Message;
+use App\Services\HuggingFaceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
 class WhatsAppController extends Controller
 {
+   private $huggingFace;
     // Definir contextos principales con sus palabras clave de activación
     private $contextTriggers = [
         'CONTPAQI' => ['contpaqi', 'conpaq', 'sistema administrativo', 'contabilidad', 'nomina', 'nominas', 'comercial', 'facturacion', 'inventario', 'bancos', 'tesoreria', 'modulo', 'licencia'],
@@ -86,10 +88,70 @@ class WhatsAppController extends Controller
         return $this->processIntelligentMessage($chat, $from, $text, $isFirstMessage);
     }
 
+    // private function processIntelligentMessage($chat, $from, $text, $isFirstMessage)
+    // {
+    //     // 1. Si es primer mensaje y no es saludo, enviar saludo + respuesta
+    //     if ($isFirstMessage && ! $this->isGreeting($text)) {
+    //         $this->sendMessage($from, "¡Hola! 👋 Bienvenido a *Tecnología Empresarial*.\n\n🚀 Estamos aquí para ayudarte a blindar y digitalizar tu empresa.");
+    //         sleep(1);
+    //     }
+
+    //     // 2. Detectar comandos de reset o menú principal
+    //     if ($this->isResetCommand($text)) {
+    //         $chat->update(['context' => 'START', 'last_bot_question' => null, 'metadata' => null]);
+
+    //         return $this->handleInitialGreeting($chat, $from);
+    //     }
+
+    //     // 3. Detectar si es un saludo inicial
+    //     if ($this->isGreeting($text) && $chat->context === 'INITIAL') {
+    //         return $this->handleInitialGreeting($chat, $from);
+    //     }
+
+    //     // 4. PRIORIDAD MÁXIMA: Si estamos en un contexto específico, NUNCA salir
+    //     $currentContext = $chat->context ?? 'INITIAL';
+
+    //     if (in_array($currentContext, ['CONTPAQI', 'NUBE', 'REDISEÑO', 'CAPACITACION', 'SOPORTE'])) {
+    //         return $this->handleContextualFlow($chat, $from, $text, $currentContext);
+    //     }
+
+    //     // 5. Si estamos en flujo de cotización
+    //     if (in_array($currentContext, ['QUOTE', 'QUOTE_WAITING_EMAIL'])) {
+    //         return $this->handleQuoteFlow($chat, $from, $text);
+    //     }
+
+    //     // 6. Detectar nuevo contexto para iniciar flujo
+    //     $detectedContext = $this->detectContextFromMessage($text);
+
+    //     if ($detectedContext !== null) {
+    //         $this->updateChatFull($chat, [
+    //             'context' => $detectedContext,
+    //             'last_bot_question' => null,
+    //         ]);
+
+    //         return $this->initializeContextFlow($chat, $from, $text, $detectedContext);
+    //     }
+
+    //     // 7. Respuestas del catálogo general (solo si no hay contexto activo)
+    //     if (in_array($currentContext, ['INITIAL', 'START', 'INFO'])) {
+    //         $catalogResponse = $this->findGeneralResponse($text);
+
+    //         if ($catalogResponse !== null) {
+    //             if (isset($catalogResponse['context'])) {
+    //                 $this->updateChatContext($chat, $catalogResponse['context']);
+    //             }
+
+    //             return $this->sendCatalogResponse($from, $catalogResponse, $chat);
+    //         }
+    //     }
+
+    //     // 8. Respuesta por defecto
+    //     return $this->handleUnknownMessage($chat, $from, $text);
+    // }
     private function processIntelligentMessage($chat, $from, $text, $isFirstMessage)
     {
         // 1. Si es primer mensaje y no es saludo, enviar saludo + respuesta
-        if ($isFirstMessage && ! $this->isGreeting($text)) {
+        if ($isFirstMessage && !$this->isGreeting($text)) {
             $this->sendMessage($from, "¡Hola! 👋 Bienvenido a *Tecnología Empresarial*.\n\n🚀 Estamos aquí para ayudarte a blindar y digitalizar tu empresa.");
             sleep(1);
         }
@@ -97,7 +159,6 @@ class WhatsAppController extends Controller
         // 2. Detectar comandos de reset o menú principal
         if ($this->isResetCommand($text)) {
             $chat->update(['context' => 'START', 'last_bot_question' => null, 'metadata' => null]);
-
             return $this->handleInitialGreeting($chat, $from);
         }
 
@@ -106,10 +167,11 @@ class WhatsAppController extends Controller
             return $this->handleInitialGreeting($chat, $from);
         }
 
-        // 4. PRIORIDAD MÁXIMA: Si estamos en un contexto específico, NUNCA salir
+        // 4. PRIORIDAD MÁXIMA: Si estamos en un contexto específico
         $currentContext = $chat->context ?? 'INITIAL';
 
         if (in_array($currentContext, ['CONTPAQI', 'NUBE', 'REDISEÑO', 'CAPACITACION', 'SOPORTE'])) {
+            // USAR IA SOLO SI ES NECESARIO DENTRO DEL CONTEXTO
             return $this->handleContextualFlow($chat, $from, $text, $currentContext);
         }
 
@@ -126,11 +188,10 @@ class WhatsAppController extends Controller
                 'context' => $detectedContext,
                 'last_bot_question' => null,
             ]);
-
             return $this->initializeContextFlow($chat, $from, $text, $detectedContext);
         }
 
-        // 7. Respuestas del catálogo general (solo si no hay contexto activo)
+        // 7. Respuestas del catálogo general
         if (in_array($currentContext, ['INITIAL', 'START', 'INFO'])) {
             $catalogResponse = $this->findGeneralResponse($text);
 
@@ -138,12 +199,11 @@ class WhatsAppController extends Controller
                 if (isset($catalogResponse['context'])) {
                     $this->updateChatContext($chat, $catalogResponse['context']);
                 }
-
                 return $this->sendCatalogResponse($from, $catalogResponse, $chat);
             }
         }
 
-        // 8. Respuesta por defecto
+        // 8. AQUÍ ENTRA LA IA - Solo cuando no sabemos qué hacer
         return $this->handleUnknownMessage($chat, $from, $text);
     }
 
@@ -992,15 +1052,112 @@ class WhatsAppController extends Controller
         return response()->json(['status' => 'ok']);
     }
 
+     
+
+     public function __construct(HuggingFaceService $huggingFace)
+    {
+        $this->huggingFace = $huggingFace;
+    }
+
     // ============================================
     // MANEJO DE MENSAJES DESCONOCIDOS
     // ============================================
 
-    private function handleUnknownMessage($chat, $from, $text)
+   private function handleUnknownMessage($chat, $from, $text)
     {
+        // ESTRATEGIA: Intentar con IA solo si no entendemos el mensaje
+        
+        // 1. Primero, intentar clasificar la intención con IA
+        $intent = $this->huggingFace->classifyIntent($text);
+        
+        if ($intent && in_array($intent, ['CONTPAQI', 'NUBE', 'REDISEÑO', 'CAPACITACION', 'SOPORTE'])) {
+            // Redirigir al flujo correcto
+            \Log::info("🤖 IA detectó intención: $intent");
+            $this->updateChatContext($chat, $intent);
+            return $this->initializeContextFlow($chat, $from, $text, $intent);
+        }
+
+        // 2. Si es pregunta general, usar IA para generar respuesta contextual
+        $history = json_decode($chat->conversation_history ?? '[]', true);
+        $context = $chat->context ?? 'INITIAL';
+        
+        \Log::info('🤖 Generando respuesta con IA', [
+            'context' => $context,
+            'message' => $text
+        ]);
+
+        $aiResponse = $this->huggingFace->generateContextualResponse($history, $text, $context);
+
+        if ($aiResponse) {
+            // La IA generó una respuesta válida
+            $this->sendMessage($from, $aiResponse);
+            
+            // Sugerir opciones después de la respuesta de IA
+            sleep(2);
+            $this->sendMessage($from, "¿Te gustaría conocer más sobre alguno de nuestros servicios?\n\n• *CONTPAQi*\n• *Nube*\n• *Rediseño*\n• *Capacitación*\n• *Soporte*\n\nO escribe *'Asesor'* para hablar con un ejecutivo.");
+            
+            return response()->json(['status' => 'ok']);
+        }
+
+        // 3. Fallback: Si la IA falla, usar mensaje predeterminado
         $this->sendMessage($from, "🤔 Disculpa, no estoy seguro de entender.\n\nPuedes escribir:\n\n• *'CONTPAQi'* - Sistemas administrativos\n• *'Nube'* - Escritorios virtuales\n• *'Rediseño'* - Blindaje fiscal\n• *'Capacitación'* - Cursos\n• *'Soporte'* - Ayuda técnica\n• *'Asesor'* - Hablar con ejecutivo\n• *'Menú'* - Ver opciones principales");
 
         return response()->json(['status' => 'ok']);
+    }
+
+    private function handleContextualFlowWithAI($chat, $from, $text, $context)
+    {
+        // Primero intentar con el flujo normal
+        $normalResponse = $this->handleContextualFlow($chat, $from, $text, $context);
+        
+        // Si el flujo normal no funcionó (usuario hizo pregunta fuera del flujo)
+        // Verificar si necesitamos IA
+        $lastQuestion = $chat->last_bot_question ?? '';
+        
+        // Solo usar IA para preguntas abiertas dentro del contexto
+        if (empty($lastQuestion) || str_contains($text, '?')) {
+            $history = json_decode($chat->conversation_history ?? '[]', true);
+            $aiResponse = $this->huggingFace->generateContextualResponse($history, $text, $context);
+            
+            if ($aiResponse) {
+                $this->sendMessage($from, $aiResponse);
+                // Regresar al flujo
+                sleep(1);
+                $this->sendMessage($from, "¿Quieres continuar con la cotización de {$context}? (Sí/No)");
+                return response()->json(['status' => 'ok']);
+            }
+        }
+        
+        return $normalResponse;
+    }
+
+    // ============================================
+    // EXTRAER DATOS AUTOMÁTICAMENTE CON IA
+    // ============================================
+
+    private function handleQuoteFlowWithAI($chat, $from, $text)
+    {
+        $lastQuestion = $chat->last_bot_question ?? '';
+        $metadata = json_decode($chat->metadata ?? '{}', true);
+
+        // Intentar extraer información automáticamente
+        $extractedInfo = $this->huggingFace->extractKeyInfo($text);
+        
+        if (!empty($extractedInfo)) {
+            \Log::info('📊 Información extraída por IA', $extractedInfo);
+            
+            // Autocompletar datos si están disponibles
+            if (isset($extractedInfo['email']) && $lastQuestion === 'email') {
+                $metadata['email'] = $extractedInfo['email'];
+            }
+            
+            if (isset($extractedInfo['num_usuarios'])) {
+                $metadata['num_usuarios'] = $extractedInfo['num_usuarios'];
+            }
+        }
+
+        // Continuar con el flujo normal
+        return $this->handleQuoteFlow($chat, $from, $text);
     }
 
     // ============================================
