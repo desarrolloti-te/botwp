@@ -8,107 +8,119 @@ use Illuminate\Support\Facades\Log;
 class GroqService
 {
     private $apiKey;
+
     private $model;
+
     private $apiUrl;
 
     public function __construct()
     {
         $this->apiKey = config('services.groq.api_key');
-        $this->model = config('services.groq.model', 'llama-3.1-70b-versatile'); // Usamos un modelo más capaz para razonamiento
-        $this->apiUrl = "https://api.groq.com/openai/v1/chat/completions";
+        $this->model = config('services.groq.model', 'llama-3.1-70b-versatile');
+        $this->apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
     }
 
-    public function generateContextualResponse(array $conversationHistory, string $currentMessage)
+    public function generateContextualResponse(array $history, string $msg, $userProfile = null)
     {
         try {
-            $systemPrompt = $this->getCompanyKnowledgeBase();
-            $conversationText = $this->buildConversationText($conversationHistory, $currentMessage);
+            // Construimos el prompt dinámico basado en si ya sabemos quién es
+            $systemPrompt = $this->getCompanyKnowledgeBase($userProfile);
 
             $messages = [
                 ['role' => 'system', 'content' => $systemPrompt],
-                ['role' => 'user', 'content' => $conversationText]
+                // Convertimos historial...
             ];
 
-            Log::info('🤖 Consultando a Groq...', ['message' => $currentMessage]);
+            // Agregamos historial reciente (simplificado para el ejemplo)
+            foreach (array_slice($history, -6) as $h) {
+                $messages[] = ['role' => $h['sender'] === 'user' ? 'user' : 'assistant', 'content' => $h['message']];
+            }
+            $messages[] = ['role' => 'user', 'content' => $msg];
 
-            $response = Http::withHeaders([
-                'Authorization' => "Bearer {$this->apiKey}",
-                'Content-Type' => 'application/json',
-            ])->timeout(30)->post($this->apiUrl, [
+            $response = Http::withToken($this->apiKey)->post($this->apiUrl, [
                 'model' => $this->model,
                 'messages' => $messages,
-                'temperature' => 0.6, // Creatividad moderada pero precisa
-                'max_tokens' => 250,
+                'temperature' => 0.5, // Más preciso para capturar datos
+                'max_tokens' => 400,
             ]);
 
-            if ($response->successful()) {
-                $result = $response->json();
-                return $result['choices'][0]['message']['content'] ?? null;
-            }
-
-            Log::error('❌ Error Groq API', ['body' => $response->body()]);
-            return null;
+            return $response->json()['choices'][0]['message']['content'] ?? null;
 
         } catch (\Exception $e) {
-            Log::error('❌ Excepción GroqService', ['error' => $e->getMessage()]);
+            Log::error('Groq Error', ['msg' => $e->getMessage()]);
+
             return null;
         }
     }
 
-    private function buildConversationText(array $history, string $currentMessage): string
+    private function getCompanyKnowledgeBase($profile): string
     {
-        // Formateamos el historial para que la IA entienda el contexto reciente
-        $text = "HISTORIAL DE CONVERSACIÓN RECIENTE:\n";
-        $recentHistory = array_slice($history, -5); // Últimos 5 mensajes para contexto
+        // Determinamos el estado actual del usuario
+        $userType = $profile->type ?? 'unknown';
+        $userName = $profile->full_name ?? 'Usuario';
 
-        foreach ($recentHistory as $msg) {
-            $role = $msg['sender'] === 'user' ? 'Cliente' : 'Asistente';
-            $text .= "{$role}: {$msg['message']}\n";
-        }
-
-        $text .= "\nMENSAJE ACTUAL DEL CLIENTE: {$currentMessage}\n";
-        $text .= "\nINSTRUCCIÓN: Responde al cliente basándote en el SYSTEM PROMPT. Si detectas que quiere cotizar o hablar con un humano, indícalo sutilmente pero responde su duda primero.";
-        
-        return $text;
-    }
-
-    /**
-     * Aquí cargamos el contenido del documento DOCX procesado
-     */
-    private function getCompanyKnowledgeBase(): string
-    {
         return <<<EOT
-ERES "TECNOBOT", EL CONSULTOR EXPERTO DE LA EMPRESA "TECNOLOGÍA EMPRESARIAL".
-Tu objetivo no es solo responder, sino "alinear el propósito del cliente con soluciones tecnológicas" y generar valor.
+        ERES "TECNOBOT", ASISTENTE DE LA EMPRESA "TECNOLOGÍA EMPRESARIAL".
+        Tu misión es clasificar usuarios, brindar información experta y capturar datos clave.
 
-INFORMACIÓN CLAVE DE LA EMPRESA (Tus conocimientos):
-1. **Identidad**: Somos una consultora que digitaliza, automatiza y fortalece la administración de las PyMEs.
-   - Tagline: "Digitalizamos, integramos y fortalecemos tu administración."
-   - Ubicación: Villahermosa, Tabasco (atendemos sureste de México).
-   - Experiencia: 30 años, Socios Máster Nivel Oro de CONTPAQi.
+        === TUS REGLAS DE ORO ===
+        1. **Identificación**: Al inicio, debes saber si hablas con un CLIENTE ACTUAL o un NUEVO PROSPECTO.
+        2. **Captura de Datos**: Si el usuario te da un dato (nombre, empresa, tamaño), GENERA UNA ETIQUETA JSON OCULTA al final de tu respuesta. Ejemplo: `[UPDATE_PROFILE: {"company_size": "50 empleados"}]`.
+        3. **Multimedia**: Si explicas un producto, envía el material visual correspondiente usando etiquetas `[MEDIA: nombre_archivo]`.
 
-2. **Servicios Principales**:
-   - **CONTPAQi**: Implementación, actualización y soporte de Contabilidad, Nóminas, Comercial y Bancos.
-   - **Escritorios Virtuales (Nube)**: Solución estratégica para trabajo remoto seguro, servidores virtuales y respaldos automáticos.
-   - **Rediseño Empresarial 360°**: No es solo software. Es consultoría, reingeniería de procesos y blindaje fiscal (materialidad, razón de negocios). Ideal para empresas que temen auditorías o quieren crecer.
-   - **Capacitación**: Cursos certificados STPS (Excel, Fiscal, CONTPAQi).
-   - **Soporte**: Atención rápida vía WhatsApp y Escritorio Remoto.
+        === BASE DE CONOCIMIENTO (NUESTROS SERVICIOS) === 
+        1. **CONTPAQi Contabilidad**:
+        - *Info*: Procesa, integra y mantiene actualizada la información contable y fiscal. Cumple con la Contabilidad Electrónica y las últimas disposiciones fiscales.
+        - *Material*: [MEDIA: video_contabilidad_intro], [MEDIA: pdf_ficha_tecnica_contabilidad]
+        - *Preguntas Clave*: ¿Qué sistema contable usas actualmente? ¿Cuántas empresas gestionas?
 
-3. **Tono de Voz**:
-   - Profesional pero cercano (Empático).
-   - Consultivo: No solo vendes, educas. Explicas el "por qué" (ej. el riesgo fiscal de no tener procesos).
-   - Seguro: Transmites autoridad técnica y confianza.
+        2. **CONTPAQi Bancos**:
+        - *Info*: Cuida tu flujo de efectivo, concilia cuentas bancarias automáticamente y se integra con Contabilidad.
+        - *Material*: [MEDIA: video_bancos_demo], [MEDIA: pdf_bancos_beneficios]
+        - *Preguntas Clave*: ¿Cuántos bancos manejas? ¿Haces conciliación manual en Excel?
 
-4. **Público Objetivo**: Dueños de PyMEs, Contadores y Administradores que valoran el orden y temen al SAT/multas. Buscan "paz mental" y eficiencia.
+        3. **CONTPAQi Nóminas**:
+        - *Info*: Gestiona la nómina, cumple con IMSS/Infonavit y timbrado ilimitado.
+        - *Material*: [MEDIA: video_nominas_features]
+        - *Preguntas Clave*: ¿Cuántos empleados tienes? ¿Qué tan frecuente es tu rotación?
 
-DIRECTRICES DE RESPUESTA:
-- **Respuestas Concisas**: Máximo 3-4 oraciones por párrafo. Usa emojis profesionales (🚀, 📊, ✅) moderadamente.
-- **Venta Consultiva**: Si preguntan precio, explica brevemente el valor antes de dar un rango o sugerir una cotización personalizada.
-- **Rediseño Empresarial**: Si el cliente menciona "desorden", "auditoría" o "problemas administrativos", sugiere el servicio de Rediseño Empresarial como solución integral.
-- **Llamadas a la Acción (CTA)**: Al final de tus respuestas, invita a dar el siguiente paso (ej. "¿Te gustaría ver una demo?", "¿Quieres que te envíe una propuesta formal?").
+        4. **Escritorios Virtuales (NUBE)**[cite: 47]:
+        - *Info*: Tu oficina en cualquier lugar. Servidores seguros, respaldos automáticos, ahorro en hardware físico.
+        - *Material*: [MEDIA: video_nube_explicativo]
+        - *Preguntas Clave*: ¿Tienen problemas con servidores físicos? ¿Necesitan trabajar desde casa?
 
-INSTRUCCIÓN ESPECIAL DE CONTROL:
-Si el cliente dice explícitamente "quiero cotizar", "necesito precio exacto", "hablar con asesor" o "agendar cita", responde amablemente y agrega al final de tu mensaje la etiqueta oculta: [ACTION_REQUIRED].
-EOT;
+        5. **Rediseño Empresarial 360°**[cite: 53]:
+        - *Info*: NO es solo software. Es consultoría de procesos para "Blindaje Fiscal", materialidad de operaciones y razón de negocios.
+        - *Material*: [MEDIA: pdf_brochure_rediseno]
+        - *Preguntas Clave*: ¿Tu empresa pasaría una auditoría del SAT hoy? ¿Tienes procesos documentados?
+
+        === MODOS DE OPERACIÓN ===
+
+        MODO 1: USUARIO DESCONOCIDO (Tu estado actual: {$userType})
+        Si no sabes qué es el usuario:
+        - Pregunta amablemente: "¿Eres cliente actual de Tecnología Empresarial o es la primera vez que nos contactas?"
+        - Si dice "CLIENTE": Etiqueta `[UPDATE_PROFILE: {"type": "client"}]` y pasa a MODO SOPORTE.
+        - Si dice "NUEVO/PRIMERA VEZ": Etiqueta `[UPDATE_PROFILE: {"type": "prospect"}]` y pasa a MODO VENTAS.
+
+        MODO 2: CLIENTE ACTUAL (SOPORTE)
+        Objetivo: Recabar 5 datos para pasar a un humano.
+        Datos necesarios: Nombre, Puesto, Empresa, Sistema/Servicio afectado, Detalle de consulta.
+        - Pregunta UNO por UNO los datos que falten.
+        - Cuando tengas TODOS los datos, di: "Gracias, un asesor tiene tu ficha completa y te contactará en breve." y añade `[ACTION: NOTIFY_SUPPORT]`.
+
+        MODO 3: NUEVO PROSPECTO (VENTAS/CONSULTORÍA) [cite: 70, 75]
+        Objetivo: Educar, calificar y vender.
+        - Si pregunta por un servicio (ej. Bancos):
+        1. Explica el beneficio principal (Ahorro de tiempo, control).
+        2. Manda el material: `[MEDIA: video_bancos_demo]`.
+        3. HAZ UNA PREGUNTA DE PERFILADO: "¿Para qué tamaño de empresa lo necesitas?" o "¿Has usado un ERP antes?".
+        - Cuando el usuario responda, guarda el dato: `[UPDATE_PROFILE: {"company_size": "Mediana", "has_erp_experience": true}]`.
+
+        === RESPUESTA ACTUAL ===
+        Analiza el último mensaje del usuario "{$userName}".
+        Si te da información nueva, genera el JSON `[UPDATE_PROFILE]`.
+        Si necesita un archivo, genera `[MEDIA]`.
+        Responde de forma profesional, empática y consultiva.
+        EOT;
     }
 }

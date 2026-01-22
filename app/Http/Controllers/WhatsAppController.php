@@ -6,6 +6,7 @@ use App\Models\Chat;
 use App\Models\Message;
 use App\Services\GroqService;
 use Illuminate\Http\Request;
+use App\Models\LeadProfile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -20,43 +21,104 @@ class WhatsAppController extends Controller
 
     public function receive(Request $request)
     {
+        // ... (Validación inicial estándar de WhatsApp) ...
         $entry = $request->input('entry.0.changes.0.value');
-        
-        if (!$entry || empty($entry['messages'])) {
-            return response()->json(['status' => 'ok']);
-        }
-
         $messageData = $entry['messages'][0];
         $from = $messageData['from'];
-        $text = $messageData['text']['body'] ?? ''; // Mantener mayúsculas/minúsculas original para Groq
+        $text = $messageData['text']['body'] ?? '';
 
-        // 1. Obtener o crear chat
-        $chat = Chat::firstOrCreate(
-            ['user_number' => $from],
-            ['status' => 'open', 'context' => 'INITIAL', 'conversation_history' => json_encode([])]
-        );
+        // 1. Obtener Chat y PERFIL
+        $chat = Chat::firstOrCreate(['user_number' => $from]);
+        $profile = LeadProfile::firstOrCreate(['user_number' => $from]);
 
-        // 2. Guardar mensaje entrante
+        // 2. Guardar mensaje usuario
         $this->saveMessage($chat, $text, 'user');
 
-        // 3. Verificar si está en un flujo estricto de captura de datos (Ej. pidiendo email)
-        if ($this->isInDataCaptureMode($chat)) {
-            return $this->handleDataCapture($chat, $from, $text);
+        // 3. Consultar a la IA con el contexto del Perfil
+        $history = json_decode($chat->conversation_history, true) ?? [];
+        $aiResponse = $this->groqService->generateContextualResponse($history, $text, $profile);
+
+        if ($aiResponse) {
+            // A. Procesar etiquetas de Actualización de Perfil (La IA aprendió algo nuevo)
+            $this->handleProfileUpdates($profile, $aiResponse);
+
+            // B. Procesar etiquetas de Multimedia (La IA quiere enviar un video)
+            $aiResponse = $this->handleMediaTags($from, $aiResponse);
+
+            // C. Procesar notificaciones de Soporte (Cliente identificado completamente)
+            if (str_contains($aiResponse, '[ACTION: NOTIFY_SUPPORT]')) {
+                $this->notifyHumanAgent($profile, $text);
+                $aiResponse = str_replace('[ACTION: NOTIFY_SUPPORT]', '', $aiResponse);
+            }
+
+            // D. Limpiar etiquetas técnicas antes de enviar al usuario
+            $cleanText = preg_replace('/\[UPDATE_PROFILE:.*?\]/', '', $aiResponse);
+            
+            if (!empty(trim($cleanText))) {
+                $this->sendMessage($from, $cleanText);
+            }
         }
-
-        // 4. Verificar palabras clave urgentes (Human Handoff)
-        if (preg_match('/(asesor|humano|persona|agente)/i', $text)) {
-            $this->sendMessage($from, "👨‍💼 Entendido. Te voy a conectar con un consultor especializado. Un momento por favor...");
-            $chat->update(['status' => 'waiting_agent', 'context' => 'HUMAN_SUPPORT']);
-            // Aquí notificarías a tu equipo
-            return response()->json(['status' => 'ok']);
-        }
-
-        // 5. MODO CONVERSACIONAL CON GROQ (IA)
-        $this->processAIConversation($chat, $from, $text);
-
+        
         return response()->json(['status' => 'ok']);
     }
+
+    // --- LÓGICA DE INTELIGENCIA ---
+
+    private function handleProfileUpdates(LeadProfile $profile, string $response)
+    {
+        // Buscamos: [UPDATE_PROFILE: {"campo": "valor"}]
+        preg_match('/\[UPDATE_PROFILE: (.*?)\]/', $response, $matches);
+        
+        if (!empty($matches[1])) {
+            $data = json_decode($matches[1], true);
+            if ($data) {
+                // Actualizamos la tabla lead_profiles dinámicamente
+                $profile->update($data);
+                \Log::info("✅ Perfil actualizado por IA", $data);
+            }
+        }
+    }
+
+    private function handleMediaTags($to, $text)
+    {
+        // Mapeo de archivos reales (Estos links deben ser reales en tu servidor/S3)
+        $mediaLibrary = [
+            'video_contabilidad_intro' => ['type' => 'video', 'url' => 'https://tusite.com/videos/contabilidad.mp4', 'caption' => 'Conoce Contabilidad 📊'],
+            'pdf_ficha_tecnica_contabilidad' => ['type' => 'document', 'url' => 'https://tusite.com/docs/ficha_tecnica.pdf', 'filename' => 'Ficha_Tecnica.pdf'],
+            'video_bancos_demo' => ['type' => 'video', 'url' => 'https://tusite.com/videos/bancos.mp4', 'caption' => 'Demo Bancos 🏦'],
+            'pdf_brochure_rediseno' => ['type' => 'document', 'url' => 'https://tusite.com/docs/rediseno.pdf', 'filename' => 'Rediseno_Empresarial.pdf'],
+            // ... agrega más aquí
+        ];
+
+        preg_match_all('/\[MEDIA: (.*?)\]/', $text, $matches);
+
+        if (!empty($matches[1])) {
+            foreach ($matches[1] as $tag) {
+                if (isset($mediaLibrary[$tag])) {
+                    $media = $mediaLibrary[$tag];
+                    if ($media['type'] == 'video') $this->sendVideo($to, $media['url'], $media['caption']);
+                    if ($media['type'] == 'document') $this->sendDocument($to, $media['url'], $media['filename']);
+                }
+            }
+            // Borramos la etiqueta para que el usuario no la lea
+            $text = preg_replace('/\[MEDIA: .*?\]/', '', $text);
+        }
+        return $text;
+    }
+
+    private function notifyHumanAgent($profile, $lastMessage)
+    {
+        $msg = "🚨 *NUEVA SOLICITUD DE CLIENTE*\n\n";
+        $msg .= "👤 Nombre: {$profile->full_name}\n";
+        $msg .= "🏢 Empresa: {$profile->company}\n";
+        $msg .= "💼 Puesto: {$profile->role}\n";
+        $msg .= "💻 Sistema: {$profile->current_system}\n";
+        $msg .= "💬 Último msg: {$lastMessage}";
+
+        // Enviar a tu número de staff
+        $this->sendMessage(config('services.whatsapp.admin_number'), $msg);
+    }
+   
 
     private function processAIConversation($chat, $from, $text)
     {
