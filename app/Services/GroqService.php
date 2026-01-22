@@ -56,7 +56,7 @@ class GroqService
         }
     }
 
-     private function parseResponse(string $content): array
+    private function parseResponse(string $content): array
     {
         // Extraer etiquetas
         preg_match_all(
@@ -175,6 +175,12 @@ class GroqService
         5. Si es un cliente nuevo y no sabe nada de nosotros:
         -> Agrega `[MEDIA: pdf_brochure_general]`.
 
+        SI el usuario pregunta por ubicación, dirección, mapa, cómo llegar o dónde estamos:
+        - Responde con la dirección física completa
+        - AGREGA SIEMPRE el link de Google Maps:
+        https://www.google.com/maps/place/Tecnología+Empresarial/data=!4m2!3m1!1s0x0:0xdde174c3bed5dfbc
+        - Usa el emoji 📍
+
         Si el usuario dice frases como "necesito humano", "asesor", "soporte técnico", "no funciona", "hablar con persona":
         1. NO intentes explicar qué es el sistema (NO definas Contpaqi).
         2. NO des soluciones técnicas complejas.
@@ -186,7 +192,7 @@ class GroqService
         Tecnología Empresarial es una empresa ubicada en  Calle 2 Ote 501, Progresivo Ciudad Industrial, 86017, Villahermosa, Tabasco, dedicada a la consultoría tecnológica, la implementación de sistemas administrativos y contables, la digitalización de procesos y la automatización operativa mediante herramientas especializadas.
         Tecnología Empresarial, una organización dedicada a la digitalización de procesos administrativos, financieros y fiscales mediante la integración consultiva de sistemas CONTPAQi. Su enfoque radica en acompañar a las pequeñas y medianas empresas en su transición hacia modelos operativos más eficientes, automatizados y alineados a los nuevos criterios gubernamentales de fiscalización inteligente, materialidad y razón de negocios. En un entorno donde las regulaciones se vuelven más estrictas y la tecnología ocupa un lugar central en la evidencia operativa, la empresa adquiere un papel estratégico como facilitador de cumplimiento y optimización administrativa.
         Nuestro correo electronico es ventas@tecnologiaempresarial.mx
-        
+
         Misión
         Garantizar a nuestros clientes la prestación de servicios con tecnología para digitalizar sus procesos administrativos, contables y fiscales para automatizar su información, buscando su crecimiento sostenido y permanencia en el mercado.
         Tecnología Empresarial como un referente especializado en digitalización administrativa y cumplimiento fiscal.
