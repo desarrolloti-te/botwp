@@ -23,6 +23,9 @@ class WhatsAppController extends Controller
     {
         // ... (Validación inicial estándar de WhatsApp) ...
         $entry = $request->input('entry.0.changes.0.value');
+        if (empty($entry['messages'])) {
+            return response()->json(['status' => 'ignored']); 
+        }
         $messageData = $entry['messages'][0];
         $from = $messageData['from'];
         $text = $messageData['text']['body'] ?? '';
