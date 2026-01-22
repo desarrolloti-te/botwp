@@ -98,6 +98,17 @@ class WhatsAppController extends Controller
         // Mapeo de claves de la IA -> Archivos reales en tu servidor
         // La estructura es: $baseUrl . '/carpeta/archivo.ext'
         $mediaLibrary = [
+            'pdf_contabilidad' => [
+                'type' => 'document', 
+                'url' => $baseUrl . '/docs/XPLUS.pdf', 
+                'filename' => 'Ficha_Tecnica_Contabilidad.pdf'
+            ],
+            // LA IA PIDIÓ ESTO: "video_contabilidad"
+            'video_contabilidad' => [
+                'type' => 'video', 
+                'url' => $baseUrl . '/videos/XPLUS.mp4', 
+                'caption' => 'Conoce Contabilidad 📊'
+            ],
             // --- CONTPAQi Contabilidad ---
             'video_contabilidad_intro' => [
                 'type' => 'video', 
@@ -286,5 +297,48 @@ class WhatsAppController extends Controller
         if (count($history) > 10) $history = array_slice($history, -10);
 
         $chat->update(['conversation_history' => json_encode($history)]);
+    }
+    // --- FUNCIONES PARA ENVIAR MULTIMEDIA (FALTABAN ESTAS) ---
+
+    private function sendDocument($to, $link, $filename)
+    {
+        Http::withToken(config('services.whatsapp.token'))
+            ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+                'messaging_product' => 'whatsapp',
+                'to' => $to,
+                'type' => 'document',
+                'document' => [
+                    'link' => $link,
+                    'filename' => $filename
+                ]
+            ]);
+    }
+
+    private function sendVideo($to, $link, $caption)
+    {
+        Http::withToken(config('services.whatsapp.token'))
+            ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+                'messaging_product' => 'whatsapp',
+                'to' => $to,
+                'type' => 'video',
+                'video' => [
+                    'link' => $link,
+                    'caption' => $caption
+                ]
+            ]);
+    }
+
+    private function sendImage($to, $link, $caption)
+    {
+        Http::withToken(config('services.whatsapp.token'))
+            ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+                'messaging_product' => 'whatsapp',
+                'to' => $to,
+                'type' => 'image',
+                'image' => [
+                    'link' => $link,
+                    'caption' => $caption
+                ]
+            ]);
     }
 }
