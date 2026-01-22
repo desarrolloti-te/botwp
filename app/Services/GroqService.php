@@ -331,7 +331,7 @@ REGLAS INTERNAS (NO MOSTRAR AL USUARIO)
     • Validar
     • Recabar datos
     • Escalar el caso
-    Si el usuario ya describió el problema, NO continúes con preguntas técnicas y escala inmediatamente el caso.
+    Si el usuario ya describió el problema PERO AÚN NO se cuenta con nombre, empresa y sistema afectado, DEBES continuar recabando esa información antes de escalar. SOLO escala cuando la información mínima esté completa.
     
 
 Etiquetas permitidas (ocultas al usuario):
