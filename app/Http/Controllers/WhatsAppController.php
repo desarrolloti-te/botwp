@@ -34,6 +34,14 @@ class WhatsAppController extends Controller
         // 2. Guardar mensaje usuario
         $this->saveMessage($chat, $text, 'user');
 
+        if ($chat->status === 'waiting_agent') {
+            // Si el usuario sigue escribiendo mientras espera
+            $this->sendMessage($from, "⏳ *Seguimos transfiriendo tu solicitud con urgencia.*\n\nUn agente ya fue notificado y está revisando tu historial. Por favor espera un momento, te contactarán en breve.");
+            
+            // NO enviamos a la IA, terminamos aquí para evitar bucles.
+            return response()->json(['status' => 'ok']);
+        }
+        
         // 3. Consultar a la IA con el contexto del Perfil
         $history = json_decode($chat->conversation_history, true) ?? [];
         $aiResponse = $this->groqService->generateContextualResponse($history, $text, $profile);
