@@ -42,6 +42,14 @@ return [
         // 'model' => 'microsoft/Phi-3-mini-4k-instruct', // Más rápido, buena calidad
         'model' => env('HUGGINGFACE_MODEL', 'meta-llama/Llama-3.2-3B-Instruct'),
     ],
+    'openrouter' => [
+    'api_key' => env('OPENROUTER_API_KEY'),
+],
+'groq' => [
+    'api_key' => env('GROQ_API_KEY'),
+    'model'   => env('GROQ_MODEL', 'llama-3.1-8b-instant'),
+],
+
     'whatsapp' => [
         'token' => env('WHATSAPP_TOKEN'),
         'phone_id' => env('WHATSAPP_PHONE_ID'),

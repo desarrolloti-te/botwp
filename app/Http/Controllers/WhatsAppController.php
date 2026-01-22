@@ -7,10 +7,53 @@ use App\Models\Message;
 use App\Services\HuggingFaceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use App\Services\OpenRouterService;
+use App\Services\GroqService;
+
 
 class WhatsAppController extends Controller
 {
-   private $huggingFace;
+    protected $groqService;
+    public function __construct(GroqService $groqService)
+    {
+        $this->groqService = $groqService;
+    }
+
+    public function handleMessage(Request $request)
+    {
+        $mensajeUsuario = $request->input('message');
+
+        // Historial (puede venir de BD o sesión)
+        $conversationHistory = [
+            ['sender' => 'user', 'message' => 'Hola'],
+            ['sender' => 'bot', 'message' => 'Hola, ¿en qué puedo ayudarte?'],
+        ];
+
+        // Detectar contexto (opcional)
+        $context = $this->detectContext($mensajeUsuario);
+
+        $respuestaIA = $this->groqService->generateContextualResponse(
+            $conversationHistory,
+            $mensajeUsuario,
+            $context
+        );
+
+        return response()->json([
+            'reply' => $respuestaIA ?? 'Un asesor se pondrá en contacto contigo 😊'
+        ]);
+    }
+
+    private function detectContext(string $message): string
+    {
+        $message = strtolower($message);
+
+        if (str_contains($message, 'contpaqi')) return 'CONTPAQI';
+        if (str_contains($message, 'nube')) return 'NUBE';
+        if (str_contains($message, 'capacita')) return 'CAPACITACION';
+        if (str_contains($message, 'soporte') || str_contains($message, 'error')) return 'SOPORTE';
+
+        return 'INITIAL';
+    }
     // Definir contextos principales con sus palabras clave de activación
     private $contextTriggers = [
         'CONTPAQI' => ['contpaqi', 'conpaq', 'sistema administrativo', 'contabilidad', 'nomina', 'nominas', 'comercial', 'facturacion', 'inventario', 'bancos', 'tesoreria', 'modulo', 'licencia'],
