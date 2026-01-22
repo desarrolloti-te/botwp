@@ -31,10 +31,11 @@ class GroqService
                 // Convertimos historial...
             ];
 
+           
             foreach (array_slice($history, -6) as $h) {
                 $messages[] = [
-                    'role' => $h['sender'] === 'user' ? 'user' : 'assistant',
-                    'content' => $h['message'],
+                    'role' => $h['role'],
+                    'content' => $h['content'],
                 ];
             }
 
