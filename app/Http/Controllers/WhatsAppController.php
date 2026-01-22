@@ -1097,11 +1097,6 @@ class WhatsAppController extends Controller
 
      
 
-     public function __construct(HuggingFaceService $huggingFace)
-    {
-        $this->huggingFace = $huggingFace;
-    }
-
     // ============================================
     // MANEJO DE MENSAJES DESCONOCIDOS
     // ============================================
