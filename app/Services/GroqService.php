@@ -331,7 +331,7 @@ REGLAS INTERNAS (NO MOSTRAR AL USUARIO)
     • Validar
     • Recabar datos
     • Escalar el caso
-    Si el usuario ya describió el problema PERO AÚN NO se cuenta con nombre, empresa y sistema afectado, DEBES continuar recabando esa información antes de escalar. SOLO escala cuando la información mínima esté completa.
+    Primero debes de recabar toda la infromacion del MODO 4 antes de escalar la situación, si el usuario ya describio su problema y ya recabaste los datos necesarios ya debes escalar la situación.
     
 
 Etiquetas permitidas (ocultas al usuario):
