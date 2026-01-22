@@ -74,74 +74,111 @@ class WhatsAppController extends Controller
     // }
 
     public function receive(Request $request)
-{
-    $entry = $request->input('entry.0.changes.0.value');
+    {
+        try {
 
-    if (empty($entry['messages'])) {
-        return response()->json(['status' => 'ignored']);
+            $entry = $request->input('entry.0.changes.0.value');
+
+            // 1️⃣ Validar que sea un mensaje real
+            if (empty($entry['messages'][0])) {
+                return response()->json(['status' => 'ignored'], 200);
+            }
+
+            $messageData = $entry['messages'][0];
+
+            // 2️⃣ Obtener message_id correctamente
+            $messageId = $messageData['id'] ?? null;
+
+            if (! $messageId) {
+                return response()->json(['status' => 'ignored'], 200);
+            }
+
+            // 3️⃣ Deduplicación
+            if (ProcessedMessage::where('message_id', $messageId)->exists()) {
+                return response()->json(['status' => 'duplicate'], 200);
+            }
+
+            // 4️⃣ Marcar como procesado
+            ProcessedMessage::create([
+                'message_id' => $messageId,
+            ]);
+
+            // 5️⃣ Datos del mensaje
+            $from = $messageData['from'];
+            $text = $messageData['text']['body'] ?? '';
+
+            if (empty($text)) {
+                return response()->json(['status' => 'ignored'], 200);
+            }
+
+            // 6️⃣ Chat y perfil
+            $chat = Chat::firstOrCreate(['user_number' => $from]);
+            $profile = LeadProfile::firstOrCreate(['user_number' => $from]);
+
+            // 7️⃣ Guardar mensaje usuario
+            $this->saveMessage($chat, $text, 'user');
+
+            // 8️⃣ Si ya está en handoff
+            if ($chat->status === 'waiting_agent') {
+                $this->sendMessage(
+                    $from,
+                    "⏳ *Seguimos gestionando tu solicitud.*\nUn asesor ya fue notificado."
+                );
+
+                return response()->json(['status' => 'ok'], 200);
+            }
+
+            // 9️⃣ Historial
+            $history = json_decode($chat->conversation_history, true) ?? [];
+
+            // 🔟 Respuesta IA
+            $result = $this->groqService->generateContextualResponse(
+                $history,
+                $text,
+                $profile
+            );
+
+            // 1️⃣1️⃣ Enviar texto
+            if (! empty($result['text'])) {
+                $this->sendMessage($from, $result['text']);
+            }
+
+            // 1️⃣2️⃣ Ejecutar acciones
+            foreach ($result['actions'] ?? [] as $action) {
+                match ($action['type']) {
+                    'UPDATE_PROFILE' => $profile->update($action['payload']),
+                    'ACTION' => $this->handleAction($chat, $profile, $action['payload']),
+                    'MEDIA' => $this->sendMedia($from, $action['payload']),
+                    default => null
+                };
+            }
+
+        } catch (\Throwable $e) {
+            Log::error('WhatsApp webhook error', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        // 🔒 SIEMPRE responder 200
+        return response()->json(['status' => 'ok'], 200);
     }
 
-    $messageData = $entry['messages'][0];
-    $from = $messageData['from'];
-    $text = $messageData['text']['body'] ?? '';
+    private function handleAction(Chat $chat, LeadProfile $profile, $action)
+    {
+        if ($action === 'NOTIFY_SUPPORT') {
+            $chat->update(['status' => 'waiting_agent']);
+            $this->notifyHumanAgent($profile, 'Solicitud de soporte');
+        }
 
-    $chat = Chat::firstOrCreate(['user_number' => $from]);
-    $profile = LeadProfile::firstOrCreate(['user_number' => $from]);
-
-    // Guardar mensaje del usuario
-    $this->saveMessage($chat, $text, 'user');
-
-    // Si ya está esperando humano
-    if ($chat->status === 'waiting_agent') {
-        $this->sendMessage(
-            $from,
-            "⏳ *Seguimos gestionando tu solicitud.*\nUn asesor ya fue notificado."
-        );
-        return response()->json(['status' => 'ok']);
+        if ($action === 'HUMAN_HANDOFF') {
+            $chat->update(['status' => 'waiting_agent']);
+            $this->sendMessage(
+                $profile->user_number,
+                '👤 Te contacto con un especialista en este momento.'
+            );
+            $this->notifyHumanAgent($profile, 'Handoff solicitado');
+        }
     }
-
-    // Historial
-    $history = json_decode($chat->conversation_history, true) ?? [];
-
-    // 👉 RESPUESTA IA (YA PARSEADA)
-    $result = $this->groqService->generateContextualResponse(
-        $history,
-        $text,
-        $profile
-    );
-
-    // 1️⃣ Enviar TEXTO
-    if (!empty($result['text'])) {
-        $this->sendMessage($from, $result['text']);
-    }
-
-    // 2️⃣ Ejecutar ACCIONES
-    foreach ($result['actions'] as $action) {
-        match ($action['type']) {
-            'UPDATE_PROFILE' => $profile->update($action['payload']),
-            'ACTION' => $this->handleAction($chat, $profile, $action['payload']),
-            'MEDIA' => $this->sendMedia($from, $action['payload']),
-        };
-    }
-
-    return response()->json(['status' => 'ok']);
-}
-private function handleAction(Chat $chat, LeadProfile $profile, $action)
-{
-    if ($action === 'NOTIFY_SUPPORT') {
-        $chat->update(['status' => 'waiting_agent']);
-        $this->notifyHumanAgent($profile, 'Solicitud de soporte');
-    }
-
-    if ($action === 'HUMAN_HANDOFF') {
-        $chat->update(['status' => 'waiting_agent']);
-        $this->sendMessage(
-            $profile->user_number,
-            "👤 Te contacto con un especialista en este momento."
-        );
-        $this->notifyHumanAgent($profile, 'Handoff solicitado');
-    }
-}
     // --- LÓGICA DE INTELIGENCIA ---
 
     private function handleProfileUpdates(LeadProfile $profile, string $response)
@@ -243,36 +280,36 @@ private function handleAction(Chat $chat, LeadProfile $profile, $action)
     // }
 
     private function sendMedia($to, $mediaKey)
-{
-    $baseUrl = 'https://botwp.tecnologiaempresarial.mx';
+    {
+        $baseUrl = 'https://botwp.tecnologiaempresarial.mx';
 
-    $mediaLibrary = [
-        'video_contabilidad' => [
-            'type' => 'video',
-            'url' => $baseUrl.'/videos/XPLUS.mp4',
-            'caption' => 'Conoce Contabilidad 📊',
-        ],
-        'pdf_contabilidad' => [
-            'type' => 'document',
-            'url' => $baseUrl.'/docs/XPLUS.pdf',
-            'filename' => 'Ficha_Tecnica_Contabilidad.pdf',
-        ],
-    ];
+        $mediaLibrary = [
+            'video_contabilidad' => [
+                'type' => 'video',
+                'url' => $baseUrl.'/videos/XPLUS.mp4',
+                'caption' => 'Conoce Contabilidad 📊',
+            ],
+            'pdf_contabilidad' => [
+                'type' => 'document',
+                'url' => $baseUrl.'/docs/XPLUS.pdf',
+                'filename' => 'Ficha_Tecnica_Contabilidad.pdf',
+            ],
+        ];
 
-    if (!isset($mediaLibrary[$mediaKey])) {
-        Log::warning("MEDIA no mapeado: $mediaKey");
-        return;
+        if (! isset($mediaLibrary[$mediaKey])) {
+            Log::warning("MEDIA no mapeado: $mediaKey");
+
+            return;
+        }
+
+        $media = $mediaLibrary[$mediaKey];
+
+        match ($media['type']) {
+            'video' => $this->sendVideo($to, $media['url'], $media['caption']),
+            'document' => $this->sendDocument($to, $media['url'], $media['filename']),
+            'image' => $this->sendImage($to, $media['url'], $media['caption']),
+        };
     }
-
-    $media = $mediaLibrary[$mediaKey];
-
-    match ($media['type']) {
-        'video' => $this->sendVideo($to, $media['url'], $media['caption']),
-        'document' => $this->sendDocument($to, $media['url'], $media['filename']),
-        'image' => $this->sendImage($to, $media['url'], $media['caption']),
-    };
-}
-
 
     private function notifyHumanAgent($profile, $lastMessage)
     {
