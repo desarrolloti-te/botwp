@@ -131,8 +131,9 @@ class WhatsAppController extends Controller
                 ->orderBy('created_at')
                 ->get()
                 ->map(fn ($m) => [
+                    'sender' => $m->sender,
                     'role' => $m->sender === 'user' ? 'user' : 'assistant',
-                    'content' => $m->content,
+                    'content' => $m->message,
                 ])
                 ->toArray();
 
@@ -150,7 +151,7 @@ class WhatsAppController extends Controller
                 Message::create([
                     'chat_id' => $chat->id,
                     'sender' => 'bot',
-                    'content' => $result['text'],
+                    'message' => $result['text'],
                 ]);
             }
 
