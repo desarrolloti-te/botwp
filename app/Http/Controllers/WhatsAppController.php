@@ -109,10 +109,10 @@ class WhatsAppController extends Controller
             $profile = LeadProfile::firstOrCreate(['user_number' => $from]);
 
             // ✅ GUARDAR MENSAJE CON wa_message_id
-            Message::create([
+           Message::create([
                 'chat_id' => $chat->id,
-                'sender' => 'user',
                 'message' => $text,
+                'type' => 'user',
                 'wa_message_id' => $waMessageId,
             ]);
 
@@ -131,7 +131,6 @@ class WhatsAppController extends Controller
                 ->orderBy('created_at')
                 ->get()
                 ->map(fn ($m) => [
-                    'sender' => $m->sender,
                     'role' => $m->sender === 'user' ? 'user' : 'assistant',
                     'content' => $m->message,
                 ])

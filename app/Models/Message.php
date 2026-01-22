@@ -11,7 +11,8 @@ class Message extends Model
         'message',
         'type',
         'requires_human',
-        'handled'
+        'handled',
+        'wa_message_id'
     ];
 
     public function chat()
