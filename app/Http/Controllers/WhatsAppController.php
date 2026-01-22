@@ -77,89 +77,100 @@ class WhatsAppController extends Controller
     {
         try {
 
-            $entry = $request->input('entry.0.changes.0.value');
+            $payload = $request->all();
 
-            // 1️⃣ Validar que sea un mensaje real
-            if (empty($entry['messages'][0])) {
+            $entry = data_get($payload, 'entry.0.changes.0.value');
+            $messageData = data_get($entry, 'messages.0');
+
+            if (! $messageData) {
                 return response()->json(['status' => 'ignored'], 200);
             }
 
-            $messageData = $entry['messages'][0];
+            $waMessageId = $messageData['id'] ?? null;
 
-            // 2️⃣ Obtener message_id correctamente
-            $messageId = $messageData['id'] ?? null;
-
-            if (! $messageId) {
+            if (! $waMessageId) {
                 return response()->json(['status' => 'ignored'], 200);
             }
 
-            // 3️⃣ Deduplicación
-            if (ProcessedMessage::where('message_id', $messageId)->exists()) {
+            // ⛔ DEDUPLICACIÓN REAL
+            if (Message::where('wa_message_id', $waMessageId)->exists()) {
                 return response()->json(['status' => 'duplicate'], 200);
             }
 
-            // 4️⃣ Marcar como procesado
-            ProcessedMessage::create([
-                'message_id' => $messageId,
-            ]);
-
-            // 5️⃣ Datos del mensaje
             $from = $messageData['from'];
             $text = $messageData['text']['body'] ?? '';
 
-            if (empty($text)) {
+            if (trim($text) === '') {
                 return response()->json(['status' => 'ignored'], 200);
             }
 
-            // 6️⃣ Chat y perfil
+            // Chat y perfil
             $chat = Chat::firstOrCreate(['user_number' => $from]);
             $profile = LeadProfile::firstOrCreate(['user_number' => $from]);
 
-            // 7️⃣ Guardar mensaje usuario
-            $this->saveMessage($chat, $text, 'user');
+            // ✅ GUARDAR MENSAJE CON wa_message_id
+            Message::create([
+                'chat_id' => $chat->id,
+                'sender' => 'user',
+                'content' => $text,
+                'wa_message_id' => $waMessageId,
+            ]);
 
-            // 8️⃣ Si ya está en handoff
+            // ⏳ Ya en handoff
             if ($chat->status === 'waiting_agent') {
                 $this->sendMessage(
                     $from,
-                    "⏳ *Seguimos gestionando tu solicitud.*\nUn asesor ya fue notificado."
+                    "⏳ *Tu solicitud ya está siendo atendida.*\nUn asesor fue notificado."
                 );
 
                 return response()->json(['status' => 'ok'], 200);
             }
 
-            // 9️⃣ Historial
-            $history = json_decode($chat->conversation_history, true) ?? [];
+            // 📜 Historial REAL desde BD
+            $history = $chat->messages()
+                ->orderBy('created_at')
+                ->get()
+                ->map(fn ($m) => [
+                    'role' => $m->sender === 'user' ? 'user' : 'assistant',
+                    'content' => $m->content,
+                ])
+                ->toArray();
 
-            // 🔟 Respuesta IA
+            // 🤖 IA
             $result = $this->groqService->generateContextualResponse(
                 $history,
                 $text,
                 $profile
             );
 
-            // 1️⃣1️⃣ Enviar texto
+            // Enviar texto
             if (! empty($result['text'])) {
                 $this->sendMessage($from, $result['text']);
+
+                Message::create([
+                    'chat_id' => $chat->id,
+                    'sender' => 'bot',
+                    'content' => $result['text'],
+                ]);
             }
 
-            // 1️⃣2️⃣ Ejecutar acciones
+            // Acciones
             foreach ($result['actions'] ?? [] as $action) {
                 match ($action['type']) {
                     'UPDATE_PROFILE' => $profile->update($action['payload']),
                     'ACTION' => $this->handleAction($chat, $profile, $action['payload']),
                     'MEDIA' => $this->sendMedia($from, $action['payload']),
-                    default => null
+                    default => null,
                 };
             }
 
         } catch (\Throwable $e) {
             Log::error('WhatsApp webhook error', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
         }
 
-        // 🔒 SIEMPRE responder 200
         return response()->json(['status' => 'ok'], 200);
     }
 
