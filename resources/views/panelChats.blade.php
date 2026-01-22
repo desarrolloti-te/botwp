@@ -2,91 +2,105 @@
 
 @section('styles')
 <style>
-.chat-card {
-    cursor:pointer;
-    transition:.15s;
-}
-.chat-card:hover {
-    background:#f1f5f9;
-}
-.chat-user {
-    font-weight:600;
-}
-.chat-preview {
-    font-size:13px;
-    color:#6c757d;
-}
-.chat-time {
-    font-size:11px;
-    color:#999;
-}
+    .chat-card {
+        cursor: pointer;
+        transition: .2s;
+        border-left: 4px solid transparent;
+    }
+    .chat-card:hover {
+        background: #f8f9fa;
+        transform: translateX(5px);
+    }
+    
+    /* Indicadores de estado visuales */
+    .status-active { border-left-color: #198754; } /* Verde */
+    .status-expired { border-left-color: #6c757d; opacity: 0.8; } /* Gris */
+    .status-human { border-left-color: #dc3545; background-color: #fff5f5; } /* Rojo */
+
+    .badge-status { font-size: 0.75rem; padding: 4px 8px; border-radius: 12px; }
+    .bg-human { background-color: #dc3545; color: white; }
+    .chat-preview { font-size: 13px; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 @endsection
 
 @section('content')
-<h4 class="mb-3">📲 Panel de Chats WhatsApp</h4>
-
-<div class="row">
-    <div class="col-md-4">
-        <h6>🟢 Activos (24h)</h6>
-        <div id="activos"></div>
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4>💬 Panel de Conversaciones</h4>
+        <button class="btn btn-primary btn-sm" onclick="loadChats()">🔄 Actualizar</button>
     </div>
 
-    <div class="col-md-4">
-        <h6>👨‍💻 Requieren Humano</h6>
-        <div id="humanos"></div>
-    </div>
-
-    <div class="col-md-4">
-        <h6>⏰ Caducados</h6>
-        <div id="caducados"></div>
+    <div class="card shadow-sm">
+        <div class="card-header bg-white">
+            <h6 class="m-0">Bandeja de Entrada</h6>
+        </div>
+        <div class="card-body p-0">
+            <div id="chats-container" class="list-group list-group-flush">
+                <div class="text-center p-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 @endsection
 
 @section('scripts')
 <script>
-function renderChats(container, chats, highlight = false) {
+function renderChats(chats) {
     let html = '';
 
+    if (chats.length === 0) {
+        document.getElementById('chats-container').innerHTML = '<div class="p-4 text-center text-muted">No hay conversaciones.</div>';
+        return;
+    }
+
     chats.forEach(chat => {
-        let msg = chat.messages[0]?.message ?? 'Sin mensajes';
-        let time = chat.messages[0]?.created_at ?? '';
-        let url = `/agent/chats/${chat.id}`;
+        let statusBadge = '';
+        let rowClass = '';
+
+        // Definir estilos según estado
+        if (chat.status === 'human_required') {
+            statusBadge = '<span class="badge bg-danger">🙋‍♂️ Requiere Humano</span>';
+            rowClass = 'status-human';
+        } else if (chat.status === 'active') {
+            statusBadge = '<span class="badge bg-success">🟢 Activo</span>';
+            rowClass = 'status-active';
+        } else {
+            statusBadge = '<span class="badge bg-secondary">⛔ Caducado</span>';
+            rowClass = 'status-expired';
+        }
 
         html += `
-            <a href="${url}" class="text-decoration-none text-dark">
-                <div class="card mb-2 chat-card ${highlight ? 'border-danger' : ''}">
-                    <div class="card-body p-2">
-                        <div class="d-flex justify-content-between">
-                            <span class="chat-user">${chat.user_number}</span>
-                            <span class="chat-time">${time.substring(11,16)}</span>
-                        </div>
-                        <div class="chat-preview">${msg}</div>
-                    </div>
+            <a href="/agent/chats/${chat.id}" class="list-group-item list-group-item-action chat-card ${rowClass} p-3">
+                <div class="d-flex w-100 justify-content-between align-items-center mb-1">
+                    <h6 class="mb-0 fw-bold">📞 ${chat.user_number}</h6>
+                    <small class="text-muted">${chat.time}</small>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <p class="mb-0 chat-preview text-truncate" style="max-width: 60%;">
+                        ${chat.last_message}
+                    </p>
+                    <div>${statusBadge}</div>
                 </div>
             </a>
         `;
     });
 
-    document.getElementById(container).innerHTML =
-        html || '<small class="text-muted">Sin registros</small>';
+    document.getElementById('chats-container').innerHTML = html;
 }
 
 function loadChats() {
     fetch("{{ route('agent.chats.data') }}")
         .then(res => res.json())
         .then(data => {
-            renderChats('activos', data.activos_24h);
-            renderChats('caducados', data.caducados);
-            renderChats('humanos', data.requieren_humano, true);
-        });
+            renderChats(data);
+        })
+        .catch(err => console.error(err));
 }
 
-// primera carga
+// Primera carga y polling
 loadChats();
-
-// polling cada 5 segundos
-setInterval(loadChats, 5000);
+setInterval(loadChats, 10000); // Actualizar cada 10 segundos
 </script>
 @endsection

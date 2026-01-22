@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Chat;
 use App\Models\Message;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;    
+use Illuminate\Support\Facades\Http;
 
 class ChatPanelController extends Controller
 {
@@ -15,92 +15,102 @@ class ChatPanelController extends Controller
         return view('panelChats');
     }
 
-     public function data()
+    public function data()
     {
-        $limit24 = now()->subHours(24);
+        // Traemos todos los chats ordenados por la última actualización (mensaje más reciente)
+        $chats = Chat::with(['messages' => function ($q) {
+                $q->latest()->limit(1); // Solo necesitamos el último mensaje para la vista previa
+            }])
+            ->whereHas('messages') // Solo chats que tengan mensajes
+            ->latest('updated_at') // Ordenar por actividad reciente
+            ->get()
+            ->map(function ($chat) {
+                // Lógica para determinar el estado
+                $lastUserMsg = $chat->messages()->where('type', 'user')->latest()->first();
+                
+                $isExpired = true;
+                if ($lastUserMsg && $lastUserMsg->created_at >= now()->subHours(24)) {
+                    $isExpired = false;
+                }
 
-        return response()->json([
-            'activos_24h' => Chat::whereHas('messages', function ($q) use ($limit24) {
-                    $q->where('type', 'user')
-                      ->where('created_at', '>=', $limit24);
-                })
-                ->with(['messages' => function ($q) {
-                    $q->latest()->limit(1);
-                }])
-                ->latest()
-                ->get(),
+                // Determinar etiqueta de estado
+                $status = 'active'; // Default
+                if ($chat->status === 'waiting_agent') {
+                    $status = 'human_required';
+                } elseif ($isExpired) {
+                    $status = 'expired';
+                }
 
-            'caducados' => Chat::whereHas('messages', function ($q) use ($limit24) {
-                    $q->where('type', 'user')
-                      ->where('created_at', '<', $limit24);
-                })
-                ->with(['messages' => function ($q) {
-                    $q->latest()->limit(1);
-                }])
-                ->latest()
-                ->get(),
+                return [
+                    'id' => $chat->id,
+                    'user_number' => $chat->user_number,
+                    'last_message' => $chat->messages->first()->message ?? '',
+                    'time' => $chat->messages->first()->created_at->format('H:i d/m') ?? '',
+                    'status' => $status, // 'active', 'expired', 'human_required'
+                    'can_reply' => !$isExpired
+                ];
+            });
 
-            'requieren_humano' => Chat::whereHas('messages', function ($q) {
-                    $q->where('requires_human', true)
-                      ->where('handled', false);
-                })
-                ->with(['messages' => function ($q) {
-                    $q->where('requires_human', true)
-                      ->where('handled', false)
-                      ->latest();
-                }])
-                ->latest()
-                ->get(),
-        ]);
+        return response()->json($chats);
     }
 
     public function show(Chat $chat)
-{
-    $messages = $chat->messages()
-        ->orderBy('created_at')
-        ->get();
+    {
+        // Traemos mensajes ordenados cronológicamente para el chat
+        $messages = $chat->messages()
+            ->orderBy('created_at', 'asc')
+            ->get();
 
-    $canReply = $chat->messages()
-        ->where('type', 'user')
-        ->where('created_at', '>=', now()->subHours(24))
-        ->exists();
+        // Validar ventana de 24h
+        $lastUserMsg = $chat->messages()
+            ->where('type', 'user')
+            ->latest()
+            ->first();
 
-    return view('agent.chats.show', compact('chat', 'messages', 'canReply'));
-}
+        $canReply = $lastUserMsg && $lastUserMsg->created_at >= now()->subHours(24);
 
-public function send(Request $request, Chat $chat)
-{
-    $request->validate([
-        'message' => 'required|string'
-    ]);
-
-    // validar ventana 24h
-    $lastUserMsg = $chat->messages()
-        ->where('type', 'user')
-        ->latest()
-        ->first();
-
-    if (!$lastUserMsg || $lastUserMsg->created_at < now()->subHours(24)) {
-        return back()->with('error', '⛔ Ventana de 24h cerrada.');
+        return view('agent.chats.show', compact('chat', 'messages', 'canReply'));
     }
 
-    // guardar mensaje del agente
-    Message::create([
-        'chat_id' => $chat->id,
-        'message' => $request->message,
-        'type' => 'agent',
-        'handled' => true
-    ]);
+    public function send(Request $request, Chat $chat)
+    {
+        $request->validate(['message' => 'required|string']);
 
-    // enviar a WhatsApp
-    Http::withToken(config('services.whatsapp.token'))
-        ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
-            'messaging_product' => 'whatsapp',
-            'to' => $chat->user_number,
-            'type' => 'text',
-            'text' => ['body' => $request->message],
+        // 1. Validar ventana 24h
+        $lastUserMsg = $chat->messages()->where('type', 'user')->latest()->first();
+        if (!$lastUserMsg || $lastUserMsg->created_at < now()->subHours(24)) {
+            return back()->with('error', '⛔ Ventana de 24h cerrada.');
+        }
+
+        // 2. Guardar mensaje local
+        Message::create([
+            'chat_id' => $chat->id,
+            'message' => $request->message,
+            'type' => 'agent', // Mensaje del humano
+            'handled' => true
         ]);
 
-    return redirect()->route('agent.chats.show', $chat);
-}
+        // 3. Actualizar timestamp del chat para que suba en la lista
+        $chat->touch(); 
+
+        // 4. Si estaba esperando agente, lo marcamos como atendido
+        if ($chat->status === 'waiting_agent') {
+            $chat->update(['status' => 'open']);
+        }
+
+        // 5. Enviar a WhatsApp API
+        try {
+            Http::withToken(config('services.whatsapp.token'))
+                ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+                    'messaging_product' => 'whatsapp',
+                    'to' => $chat->user_number,
+                    'type' => 'text',
+                    'text' => ['body' => $request->message],
+                ]);
+        } catch (\Exception $e) {
+            return back()->with('error', 'Error al conectar con WhatsApp API');
+        }
+
+        return redirect()->route('agent.chats.show', $chat);
+    }
 }
