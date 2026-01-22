@@ -13,18 +13,15 @@ class GroqService
 
     public function __construct()
     {
-        $this->apiKey = config('services.groq.api_key'); // Nuevo config
-        $this->model = config('services.groq.model', 'llama-3.1-8b-instant');
+        $this->apiKey = config('services.groq.api_key');
+        $this->model = config('services.groq.model', 'llama-3.1-70b-versatile'); // Usamos un modelo más capaz para razonamiento
         $this->apiUrl = "https://api.groq.com/openai/v1/chat/completions";
     }
 
-    /**
-     * Genera respuesta contextual usando historial de conversación
-     */
-    public function generateContextualResponse(array $conversationHistory, string $currentMessage, string $context = 'INITIAL')
+    public function generateContextualResponse(array $conversationHistory, string $currentMessage)
     {
         try {
-            $systemPrompt = $this->buildSystemPrompt($context);
+            $systemPrompt = $this->getCompanyKnowledgeBase();
             $conversationText = $this->buildConversationText($conversationHistory, $currentMessage);
 
             $messages = [
@@ -32,100 +29,86 @@ class GroqService
                 ['role' => 'user', 'content' => $conversationText]
             ];
 
-            Log::info('🤖 Enviando prompt a Groq', [
-                'model' => $this->model,
-                'prompt_length' => strlen($conversationText),
-                'context' => $context
-            ]);
+            Log::info('🤖 Consultando a Groq...', ['message' => $currentMessage]);
 
             $response = Http::withHeaders([
                 'Authorization' => "Bearer {$this->apiKey}",
                 'Content-Type' => 'application/json',
-            ])->timeout(60)->post($this->apiUrl, [
+            ])->timeout(30)->post($this->apiUrl, [
                 'model' => $this->model,
                 'messages' => $messages,
-                'max_tokens' => 120,
+                'temperature' => 0.6, // Creatividad moderada pero precisa
+                'max_tokens' => 250,
             ]);
 
             if ($response->successful()) {
                 $result = $response->json();
-                $generatedText = $result['choices'][0]['message']['content'] ?? null;
-                $cleanResponse = $this->cleanResponse($generatedText);
-
-                Log::info('✅ Respuesta IA generada', [
-                    'response' => $cleanResponse
-                ]);
-
-                return $cleanResponse;
+                return $result['choices'][0]['message']['content'] ?? null;
             }
 
-            Log::error('❌ Error en Groq API', [
-                'status' => $response->status(),
-                'body' => $response->body()
-            ]);
-
+            Log::error('❌ Error Groq API', ['body' => $response->body()]);
             return null;
 
         } catch (\Exception $e) {
-            Log::error('❌ Excepción en GroqService', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            Log::error('❌ Excepción GroqService', ['error' => $e->getMessage()]);
             return null;
         }
-    }
-
-    private function buildSystemPrompt(string $context): string
-    {
-        $basePrompt = "Eres un asistente virtual profesional de Tecnología Empresarial, empresa mexicana especializada en:\n" .
-                     "- CONTPAQi (Contabilidad, Nóminas, Comercial, Bancos)\n" .
-                     "- Escritorios virtuales en la nube\n" .
-                     "- Rediseño empresarial y blindaje fiscal\n" .
-                     "- Capacitación empresarial certificada STPS\n" .
-                     "- Soporte técnico especializado\n\n" .
-                     "IMPORTANTE:\n" .
-                     "- Respuestas CORTAS (máx 3-4 líneas)\n" .
-                     "- Español de México, amigable y profesional\n" .
-                     "- Usa emojis moderadamente (1-2 por mensaje)\n" .
-                     "- Si no sabes algo, sugiere hablar con un asesor\n" .
-                     "- Dirige sutilmente hacia agendar citas o cotizaciones\n" .
-                     "- NUNCA inventes precios o datos técnicos\n\n";
-
-        $contextPrompts = [
-            'CONTPAQI' => "CONTEXTO: Usuario interesado en CONTPAQi. Enfócate en beneficios, módulos y casos de uso.",
-            'NUBE' => "CONTEXTO: Usuario pregunta sobre escritorios virtuales en la nube.",
-            'REDISEÑO' => "CONTEXTO: Usuario interesado en rediseño empresarial y blindaje fiscal.",
-            'CAPACITACION' => "CONTEXTO: Usuario pregunta sobre capacitación. Menciona cursos, certificación y modalidades.",
-            'SOPORTE' => "CONTEXTO: Usuario necesita soporte técnico. Sé empático y práctico.",
-            'INITIAL' => "CONTEXTO: Primera interacción. Usuario conociendo servicios. Sé acogedor.",
-        ];
-
-        return $basePrompt . ($contextPrompts[$context] ?? $contextPrompts['INITIAL']);
     }
 
     private function buildConversationText(array $history, string $currentMessage): string
     {
-        $text = "Historial de conversación:\n";
-        $recentHistory = array_slice($history, -6);
+        // Formateamos el historial para que la IA entienda el contexto reciente
+        $text = "HISTORIAL DE CONVERSACIÓN RECIENTE:\n";
+        $recentHistory = array_slice($history, -5); // Últimos 5 mensajes para contexto
 
         foreach ($recentHistory as $msg) {
-            $sender = $msg['sender'] === 'user' ? 'Cliente' : 'Asistente';
-            $text .= "{$sender}: {$msg['message']}\n";
+            $role = $msg['sender'] === 'user' ? 'Cliente' : 'Asistente';
+            $text .= "{$role}: {$msg['message']}\n";
         }
 
-        $text .= "Cliente: {$currentMessage}\n";
+        $text .= "\nMENSAJE ACTUAL DEL CLIENTE: {$currentMessage}\n";
+        $text .= "\nINSTRUCCIÓN: Responde al cliente basándote en el SYSTEM PROMPT. Si detectas que quiere cotizar o hablar con un humano, indícalo sutilmente pero responde su duda primero.";
+        
         return $text;
     }
 
-    private function cleanResponse(?string $response): ?string
+    /**
+     * Aquí cargamos el contenido del documento DOCX procesado
+     */
+    private function getCompanyKnowledgeBase(): string
     {
-        if (!$response) return null;
-        $response = trim($response);
-        $response = preg_replace('/^(Asistente:|Cliente:|Bot:|Respuesta:)\s*/i', '', $response);
-        $response = preg_replace('/\n{3,}/', "\n\n", $response);
-        if (strlen($response) > 600) $response = substr($response, 0, 597) . '...';
-        if (strlen($response) < 10) return null;
-        if (!preg_match('/[.!?]$/', $response)) $response .= '.';
-        return $response;
+        return <<<EOT
+ERES "TECNOBOT", EL CONSULTOR EXPERTO DE LA EMPRESA "TECNOLOGÍA EMPRESARIAL".
+Tu objetivo no es solo responder, sino "alinear el propósito del cliente con soluciones tecnológicas" y generar valor.
+
+INFORMACIÓN CLAVE DE LA EMPRESA (Tus conocimientos):
+1. **Identidad**: Somos una consultora que digitaliza, automatiza y fortalece la administración de las PyMEs.
+   - Tagline: "Digitalizamos, integramos y fortalecemos tu administración."
+   - Ubicación: Villahermosa, Tabasco (atendemos sureste de México).
+   - Experiencia: 30 años, Socios Máster Nivel Oro de CONTPAQi.
+
+2. **Servicios Principales**:
+   - **CONTPAQi**: Implementación, actualización y soporte de Contabilidad, Nóminas, Comercial y Bancos.
+   - **Escritorios Virtuales (Nube)**: Solución estratégica para trabajo remoto seguro, servidores virtuales y respaldos automáticos.
+   - **Rediseño Empresarial 360°**: No es solo software. Es consultoría, reingeniería de procesos y blindaje fiscal (materialidad, razón de negocios). Ideal para empresas que temen auditorías o quieren crecer.
+   - **Capacitación**: Cursos certificados STPS (Excel, Fiscal, CONTPAQi).
+   - **Soporte**: Atención rápida vía WhatsApp y Escritorio Remoto.
+
+3. **Tono de Voz**:
+   - Profesional pero cercano (Empático).
+   - Consultivo: No solo vendes, educas. Explicas el "por qué" (ej. el riesgo fiscal de no tener procesos).
+   - Seguro: Transmites autoridad técnica y confianza.
+
+4. **Público Objetivo**: Dueños de PyMEs, Contadores y Administradores que valoran el orden y temen al SAT/multas. Buscan "paz mental" y eficiencia.
+
+DIRECTRICES DE RESPUESTA:
+- **Respuestas Concisas**: Máximo 3-4 oraciones por párrafo. Usa emojis profesionales (🚀, 📊, ✅) moderadamente.
+- **Venta Consultiva**: Si preguntan precio, explica brevemente el valor antes de dar un rango o sugerir una cotización personalizada.
+- **Rediseño Empresarial**: Si el cliente menciona "desorden", "auditoría" o "problemas administrativos", sugiere el servicio de Rediseño Empresarial como solución integral.
+- **Llamadas a la Acción (CTA)**: Al final de tus respuestas, invita a dar el siguiente paso (ej. "¿Te gustaría ver una demo?", "¿Quieres que te envíe una propuesta formal?").
+
+INSTRUCCIÓN ESPECIAL DE CONTROL:
+Si el cliente dice explícitamente "quiero cotizar", "necesito precio exacto", "hablar con asesor" o "agendar cita", responde amablemente y agrega al final de tu mensaje la etiqueta oculta: [ACTION_REQUIRED].
+EOT;
     }
 }
