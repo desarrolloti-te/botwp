@@ -330,6 +330,7 @@ REGLAS INTERNAS (NO MOSTRAR AL USUARIO)
     • Validar
     • Recabar datos
     • Escalar el caso
+    Si el usuario ya describió el problema, NO continúes con preguntas técnicas y escala inmediatamente el caso.
     
 
 Etiquetas permitidas (ocultas al usuario):
