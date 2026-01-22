@@ -79,28 +79,72 @@ class WhatsAppController extends Controller
         }
     }
 
-    private function handleMediaTags($to, $text)
+   private function handleMediaTags($to, $text)
     {
-        // Mapeo de archivos reales (Estos links deben ser reales en tu servidor/S3)
+        // Tu dominio base
+        $baseUrl = 'https://botwp.tecnologiaempresarial.mx';
+
+        // Mapeo de claves de la IA -> Archivos reales en tu servidor
+        // La estructura es: $baseUrl . '/carpeta/archivo.ext'
         $mediaLibrary = [
-            'video_contabilidad_intro' => ['type' => 'video', 'url' => 'https://tusite.com/videos/contabilidad.mp4', 'caption' => 'Conoce Contabilidad 📊'],
-            'pdf_ficha_tecnica_contabilidad' => ['type' => 'document', 'url' => 'https://tusite.com/docs/ficha_tecnica.pdf', 'filename' => 'Ficha_Tecnica.pdf'],
-            'video_bancos_demo' => ['type' => 'video', 'url' => 'https://tusite.com/videos/bancos.mp4', 'caption' => 'Demo Bancos 🏦'],
-            'pdf_brochure_rediseno' => ['type' => 'document', 'url' => 'https://tusite.com/docs/rediseno.pdf', 'filename' => 'Rediseno_Empresarial.pdf'],
-            // ... agrega más aquí
+            // --- CONTPAQi Contabilidad ---
+            'video_contabilidad_intro' => [
+                'type' => 'video', 
+                'url' => $baseUrl . '/videos/XPLUS.mp4', // Ejemplo: Pon aquí tu video real de contabilidad
+                'caption' => 'Conoce Contabilidad 📊'
+            ],
+            'pdf_ficha_tecnica_contabilidad' => [
+                'type' => 'document', 
+                'url' => $baseUrl . '/docs/XPLUS.pdf',   // Ejemplo: Pon aquí tu PDF real
+                'filename' => 'Ficha_Tecnica_Contabilidad.pdf'
+            ],
+            'img_infografia_contabilidad' => [
+                'type' => 'image',
+                'url' => $baseUrl . '/images/XPLUS.png', // Ejemplo
+                'caption' => 'Beneficios Clave'
+            ],
+
+            // --- EJEMPLOS CON TUS RUTAS XPLUS (Si XPLUS fuera un producto) ---
+            'pdf_xplus' => [
+                'type' => 'document',
+                'url' => $baseUrl . '/docs/XPLUS.pdf', 
+                'filename' => 'Documentacion_XPLUS.pdf'
+            ],
+            'img_xplus' => [
+                'type' => 'image',
+                'url' => $baseUrl . '/images/XPLUS.png',
+                'caption' => 'Imagen XPLUS'
+            ],
+            'video_xplus' => [
+                'type' => 'video',
+                'url' => $baseUrl . '/videos/XPLUS.mp4',
+                'caption' => 'Video Demo XPLUS'
+            ],
         ];
 
+        // Lógica de reemplazo (No cambiar)
         preg_match_all('/\[MEDIA: (.*?)\]/', $text, $matches);
 
         if (!empty($matches[1])) {
             foreach ($matches[1] as $tag) {
                 if (isset($mediaLibrary[$tag])) {
                     $media = $mediaLibrary[$tag];
-                    if ($media['type'] == 'video') $this->sendVideo($to, $media['url'], $media['caption']);
-                    if ($media['type'] == 'document') $this->sendDocument($to, $media['url'], $media['filename']);
+                    
+                    if ($media['type'] == 'video') {
+                        $this->sendVideo($to, $media['url'], $media['caption'] ?? '');
+                    }
+                    if ($media['type'] == 'document') {
+                        $this->sendDocument($to, $media['url'], $media['filename'] ?? 'documento.pdf');
+                    }
+                    if ($media['type'] == 'image') {
+                        $this->sendImage($to, $media['url'], $media['caption'] ?? '');
+                    }
+                } else {
+                    // Log para depurar si la IA pide un archivo que no tienes mapeado
+                    \Log::warning("⚠️ La IA pidió [MEDIA: $tag] pero no existe en \$mediaLibrary");
                 }
             }
-            // Borramos la etiqueta para que el usuario no la lea
+            // Limpiamos la etiqueta del texto final
             $text = preg_replace('/\[MEDIA: .*?\]/', '', $text);
         }
         return $text;
