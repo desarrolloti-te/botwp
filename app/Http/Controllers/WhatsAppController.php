@@ -112,7 +112,7 @@ class WhatsAppController extends Controller
             Message::create([
                 'chat_id' => $chat->id,
                 'sender' => 'user',
-                'content' => $text,
+                'message' => $text,
                 'wa_message_id' => $waMessageId,
             ]);
 
