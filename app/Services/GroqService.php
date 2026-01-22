@@ -48,7 +48,14 @@ class GroqService
 
             $content = $response->json()['choices'][0]['message']['content'] ?? null;
 
-            return $this->parseResponse($content);
+            // return $this->parseResponse($content);
+            if (empty($content)) {
+                return [
+                    'message' => 'Gracias por tu mensaje. Te estoy conectando con un asesor técnico para ayudarte de inmediato. 👨‍💻',
+                    'actions' => ['HUMAN_HANDOFF']
+                ];
+            }
+
         } catch (\Exception $e) {
             Log::error('Groq Error', ['msg' => $e->getMessage()]);
 
