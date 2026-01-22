@@ -3,10 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Chat;
+use App\Models\LeadProfile;
 use App\Models\Message;
 use App\Services\GroqService;
 use Illuminate\Http\Request;
-use App\Models\LeadProfile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -24,7 +24,7 @@ class WhatsAppController extends Controller
         // ... (Validación inicial estándar de WhatsApp) ...
         $entry = $request->input('entry.0.changes.0.value');
         if (empty($entry['messages'])) {
-            return response()->json(['status' => 'ignored']); 
+            return response()->json(['status' => 'ignored']);
         }
         $messageData = $entry['messages'][0];
         $from = $messageData['from'];
@@ -40,11 +40,11 @@ class WhatsAppController extends Controller
         if ($chat->status === 'waiting_agent') {
             // Si el usuario sigue escribiendo mientras espera
             $this->sendMessage($from, "⏳ *Seguimos transfiriendo tu solicitud con urgencia.*\n\nUn agente ya fue notificado y está revisando tu historial. Por favor espera un momento, te contactarán en breve.");
-            
+
             // NO enviamos a la IA, terminamos aquí para evitar bucles.
             return response()->json(['status' => 'ok']);
         }
-        
+
         // 3. Consultar a la IA con el contexto del Perfil
         $history = json_decode($chat->conversation_history, true) ?? [];
         $aiResponse = $this->groqService->generateContextualResponse($history, $text, $profile);
@@ -64,12 +64,12 @@ class WhatsAppController extends Controller
 
             // D. Limpiar etiquetas técnicas antes de enviar al usuario
             $cleanText = preg_replace('/\[UPDATE_PROFILE:.*?\]/', '', $aiResponse);
-            
-            if (!empty(trim($cleanText))) {
+
+            if (! empty(trim($cleanText))) {
                 $this->sendMessage($from, $cleanText);
             }
         }
-        
+
         return response()->json(['status' => 'ok']);
     }
 
@@ -79,18 +79,18 @@ class WhatsAppController extends Controller
     {
         // Buscamos: [UPDATE_PROFILE: {"campo": "valor"}]
         preg_match('/\[UPDATE_PROFILE: (.*?)\]/', $response, $matches);
-        
-        if (!empty($matches[1])) {
+
+        if (! empty($matches[1])) {
             $data = json_decode($matches[1], true);
             if ($data) {
                 // Actualizamos la tabla lead_profiles dinámicamente
                 $profile->update($data);
-                \Log::info("✅ Perfil actualizado por IA", $data);
+                \Log::info('✅ Perfil actualizado por IA', $data);
             }
         }
     }
 
-   private function handleMediaTags($to, $text)
+    private function handleMediaTags($to, $text)
     {
         // Tu dominio base
         $baseUrl = 'https://botwp.tecnologiaempresarial.mx';
@@ -99,59 +99,59 @@ class WhatsAppController extends Controller
         // La estructura es: $baseUrl . '/carpeta/archivo.ext'
         $mediaLibrary = [
             'pdf_contabilidad' => [
-                'type' => 'document', 
-                'url' => $baseUrl . '/docs/XPLUS.pdf', 
-                'filename' => 'Ficha_Tecnica_Contabilidad.pdf'
+                'type' => 'document',
+                'url' => $baseUrl.'/docs/XPLUS.pdf',
+                'filename' => 'Ficha_Tecnica_Contabilidad.pdf',
             ],
             // LA IA PIDIÓ ESTO: "video_contabilidad"
             'video_contabilidad' => [
-                'type' => 'video', 
-                'url' => $baseUrl . '/videos/XPLUS.mp4', 
-                'caption' => 'Conoce Contabilidad 📊'
+                'type' => 'video',
+                'url' => $baseUrl.'/videos/XPLUS.mp4',
+                'caption' => 'Conoce Contabilidad 📊',
             ],
             // --- CONTPAQi Contabilidad ---
             'video_contabilidad_intro' => [
-                'type' => 'video', 
-                'url' => $baseUrl . '/videos/XPLUS.mp4', // Ejemplo: Pon aquí tu video real de contabilidad
-                'caption' => 'Conoce Contabilidad 📊'
+                'type' => 'video',
+                'url' => $baseUrl.'/videos/XPLUS.mp4', // Ejemplo: Pon aquí tu video real de contabilidad
+                'caption' => 'Conoce Contabilidad 📊',
             ],
             'pdf_ficha_tecnica_contabilidad' => [
-                'type' => 'document', 
-                'url' => $baseUrl . '/docs/XPLUS.pdf',   // Ejemplo: Pon aquí tu PDF real
-                'filename' => 'Ficha_Tecnica_Contabilidad.pdf'
+                'type' => 'document',
+                'url' => $baseUrl.'/docs/XPLUS.pdf',   // Ejemplo: Pon aquí tu PDF real
+                'filename' => 'Ficha_Tecnica_Contabilidad.pdf',
             ],
             'img_infografia_contabilidad' => [
                 'type' => 'image',
-                'url' => $baseUrl . '/images/XPLUS.png', // Ejemplo
-                'caption' => 'Beneficios Clave'
+                'url' => $baseUrl.'/images/XPLUS.png', // Ejemplo
+                'caption' => 'Beneficios Clave',
             ],
 
             // --- EJEMPLOS CON TUS RUTAS XPLUS (Si XPLUS fuera un producto) ---
             'pdf_xplus' => [
                 'type' => 'document',
-                'url' => $baseUrl . '/docs/XPLUS.pdf', 
-                'filename' => 'Documentacion_XPLUS.pdf'
+                'url' => $baseUrl.'/docs/XPLUS.pdf',
+                'filename' => 'Documentacion_XPLUS.pdf',
             ],
             'img_xplus' => [
                 'type' => 'image',
-                'url' => $baseUrl . '/images/XPLUS.png',
-                'caption' => 'Imagen XPLUS'
+                'url' => $baseUrl.'/images/XPLUS.png',
+                'caption' => 'Imagen XPLUS',
             ],
             'video_xplus' => [
                 'type' => 'video',
-                'url' => $baseUrl . '/videos/XPLUS.mp4',
-                'caption' => 'Video Demo XPLUS'
+                'url' => $baseUrl.'/videos/XPLUS.mp4',
+                'caption' => 'Video Demo XPLUS',
             ],
         ];
 
         // Lógica de reemplazo (No cambiar)
         preg_match_all('/\[MEDIA: (.*?)\]/', $text, $matches);
 
-        if (!empty($matches[1])) {
+        if (! empty($matches[1])) {
             foreach ($matches[1] as $tag) {
                 if (isset($mediaLibrary[$tag])) {
                     $media = $mediaLibrary[$tag];
-                    
+
                     if ($media['type'] == 'video') {
                         $this->sendVideo($to, $media['url'], $media['caption'] ?? '');
                     }
@@ -169,6 +169,7 @@ class WhatsAppController extends Controller
             // Limpiamos la etiqueta del texto final
             $text = preg_replace('/\[MEDIA: .*?\]/', '', $text);
         }
+
         return $text;
     }
 
@@ -184,16 +185,34 @@ class WhatsAppController extends Controller
         // Enviar a tu número de staff
         $this->sendMessage(config('services.whatsapp.admin_number'), $msg);
     }
-   
 
     private function processAIConversation($chat, $from, $text)
     {
         $history = json_decode($chat->conversation_history, true) ?? [];
-        
+
         // Generar respuesta con Groq usando el conocimiento de la empresa
         $aiResponse = $this->groqService->generateContextualResponse($history, $text);
 
         if ($aiResponse) {
+
+            $cleanText = preg_replace('/\[.*?\]/', '', $aiResponse);
+            $cleanText = trim($cleanText);
+
+            // 2. RED DE SEGURIDAD: Si la IA actualizó perfil pero no dijo nada
+            if (empty($cleanText)) {
+                if (str_contains($aiResponse, '"prospect"')) {
+                    // Si la IA detectó que es NUEVO pero no saludó
+                    $cleanText = "🎉 ¡Bienvenido a Tecnología Empresarial!\n\nSomos expertos en digitalización y sistemas CONTPAQi. Cuéntame, ¿qué solución estás buscando hoy? (Ej: Contabilidad, Nóminas, Nube...)";
+                } elseif (str_contains($aiResponse, '"client"')) {
+                    // Si la IA detectó que es CLIENTE pero no preguntó datos
+                    $cleanText = '¡Gracias! Para ubicar tu contrato y ayudarte, ¿podrías decirme tu *Nombre Completo* y *Empresa*?';
+                }
+            }
+
+            // 3. Enviar mensaje si ya tenemos texto (de la IA o de la Red de Seguridad)
+            if (! empty($cleanText)) {
+                $this->sendMessage($from, $cleanText);
+            }
             // Limpiar etiquetas internas si las hubiera
             $cleanResponse = str_replace('[ACTION_REQUIRED]', '', $aiResponse);
             $this->sendMessage($from, $cleanResponse);
@@ -212,16 +231,16 @@ class WhatsAppController extends Controller
     private function triggerSalesFlow($chat, $from)
     {
         // La IA detectó interés fuerte. Iniciamos captura de datos.
-        $this->sendMessage($from, "📝 Para darte la mejor atención, me gustaría tomar tus datos para una propuesta formal. ¿Cuál es tu *Nombre Completo*?");
-        
+        $this->sendMessage($from, '📝 Para darte la mejor atención, me gustaría tomar tus datos para una propuesta formal. ¿Cuál es tu *Nombre Completo*?');
+
         $chat->update([
             'context' => 'CAPTURE_NAME', // Cambiamos el contexto para atrapar el siguiente mensaje
-            'metadata' => json_encode(['lead_source' => 'AI_CONVERSATION'])
+            'metadata' => json_encode(['lead_source' => 'AI_CONVERSATION']),
         ]);
     }
 
     // --- MANEJO DE FLUJOS DE CAPTURA DE DATOS (NO IA) ---
-    
+
     private function isInDataCaptureMode($chat)
     {
         return in_array($chat->context, ['CAPTURE_NAME', 'CAPTURE_COMPANY', 'CAPTURE_EMAIL']);
@@ -240,19 +259,19 @@ class WhatsAppController extends Controller
 
             case 'CAPTURE_COMPANY':
                 $metadata['company'] = $text;
-                $this->sendMessage($from, "Excelente. 📧 Por último, ¿cuál es tu *Correo Electrónico*?");
+                $this->sendMessage($from, 'Excelente. 📧 Por último, ¿cuál es tu *Correo Electrónico*?');
                 $chat->update(['context' => 'CAPTURE_EMAIL', 'metadata' => json_encode($metadata)]);
                 break;
 
             case 'CAPTURE_EMAIL':
                 $metadata['email'] = $text;
                 $this->sendMessage($from, "✅ ¡Perfecto! Hemos registrado tus datos.\n\nUn consultor analizará tu caso y te contactará en breve. Mientras tanto, ¿tienes alguna otra duda sobre nuestros servicios?");
-                
+
                 // Volvemos a modo conversación normal
                 $chat->update(['context' => 'INITIAL', 'metadata' => json_encode($metadata)]);
-                
+
                 // AQUÍ: Guardar Lead en BD o enviar email de notificación
-                Log::info("🎯 Nuevo Lead Capturado", $metadata);
+                Log::info('🎯 Nuevo Lead Capturado', $metadata);
                 break;
         }
 
@@ -265,14 +284,16 @@ class WhatsAppController extends Controller
     {
         // Guardar mensaje del bot en historial
         $chat = Chat::where('user_number', $to)->first();
-        if ($chat) $this->saveMessage($chat, $message, 'bot');
+        if ($chat) {
+            $this->saveMessage($chat, $message, 'bot');
+        }
 
         Http::withToken(config('services.whatsapp.token'))
-            ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+            ->post(config('services.whatsapp.url').'/'.config('services.whatsapp.phone_id').'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => $to,
                 'type' => 'text',
-                'text' => ['body' => $message]
+                'text' => ['body' => $message],
             ]);
     }
 
@@ -282,7 +303,7 @@ class WhatsAppController extends Controller
         Message::create([
             'chat_id' => $chat->id,
             'message' => $message,
-            'type' => $sender
+            'type' => $sender,
         ]);
 
         // Actualizar historial JSON para contexto de la IA
@@ -290,11 +311,13 @@ class WhatsAppController extends Controller
         $history[] = [
             'sender' => $sender,
             'message' => $message,
-            'timestamp' => now()->toDateTimeString()
+            'timestamp' => now()->toDateTimeString(),
         ];
-        
+
         // Mantener historial ligero (últimos 10 mensajes)
-        if (count($history) > 10) $history = array_slice($history, -10);
+        if (count($history) > 10) {
+            $history = array_slice($history, -10);
+        }
 
         $chat->update(['conversation_history' => json_encode($history)]);
     }
@@ -303,42 +326,42 @@ class WhatsAppController extends Controller
     private function sendDocument($to, $link, $filename)
     {
         Http::withToken(config('services.whatsapp.token'))
-            ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+            ->post(config('services.whatsapp.url').'/'.config('services.whatsapp.phone_id').'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => $to,
                 'type' => 'document',
                 'document' => [
                     'link' => $link,
-                    'filename' => $filename
-                ]
+                    'filename' => $filename,
+                ],
             ]);
     }
 
     private function sendVideo($to, $link, $caption)
     {
         Http::withToken(config('services.whatsapp.token'))
-            ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+            ->post(config('services.whatsapp.url').'/'.config('services.whatsapp.phone_id').'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => $to,
                 'type' => 'video',
                 'video' => [
                     'link' => $link,
-                    'caption' => $caption
-                ]
+                    'caption' => $caption,
+                ],
             ]);
     }
 
     private function sendImage($to, $link, $caption)
     {
         Http::withToken(config('services.whatsapp.token'))
-            ->post(config('services.whatsapp.url') . '/' . config('services.whatsapp.phone_id') . '/messages', [
+            ->post(config('services.whatsapp.url').'/'.config('services.whatsapp.phone_id').'/messages', [
                 'messaging_product' => 'whatsapp',
                 'to' => $to,
                 'type' => 'image',
                 'image' => [
                     'link' => $link,
-                    'caption' => $caption
-                ]
+                    'caption' => $caption,
+                ],
             ]);
     }
 }
