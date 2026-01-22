@@ -109,7 +109,7 @@ class WhatsAppController extends Controller
             $profile = LeadProfile::firstOrCreate(['user_number' => $from]);
 
             // ✅ GUARDAR MENSAJE CON wa_message_id
-           Message::create([
+             Message::create([
                 'chat_id' => $chat->id,
                 'message' => $text,
                 'type' => 'user',
@@ -127,14 +127,17 @@ class WhatsAppController extends Controller
             }
 
             // 📜 Historial REAL desde BD
-            $history = $chat->messages()
-                ->orderBy('created_at')
-                ->get()
-                ->map(fn ($m) => [
-                    'role' => $m->sender === 'user' ? 'user' : 'assistant',
-                    'content' => $m->message,
-                ])
-                ->toArray();
+           $history = $chat->messages()
+                    ->orderBy('created_at')
+                    ->get()
+                    ->map(function ($m) {
+                        return [
+                            'role' => $m->type === 'user' ? 'user' : 'assistant',
+                            'content' => $m->message,
+                        ];
+                    })
+                    ->toArray();
+
 
             // 🤖 IA
             $result = $this->groqService->generateContextualResponse(
@@ -149,9 +152,10 @@ class WhatsAppController extends Controller
 
                 Message::create([
                     'chat_id' => $chat->id,
-                    'sender' => 'bot',
                     'message' => $result['text'],
+                    'type' => 'bot',
                 ]);
+
             }
 
             // Acciones
