@@ -19,60 +19,129 @@ class WhatsAppController extends Controller
         $this->groqService = $groqService;
     }
 
+    // public function receive(Request $request)
+    // {
+    //     // ... (Validación inicial estándar de WhatsApp) ...
+    //     $entry = $request->input('entry.0.changes.0.value');
+    //     if (empty($entry['messages'])) {
+    //         return response()->json(['status' => 'ignored']);
+    //     }
+    //     $messageData = $entry['messages'][0];
+    //     $from = $messageData['from'];
+    //     $text = $messageData['text']['body'] ?? '';
+
+    //     // 1. Obtener Chat y PERFIL
+    //     $chat = Chat::firstOrCreate(['user_number' => $from]);
+    //     $profile = LeadProfile::firstOrCreate(['user_number' => $from]);
+
+    //     // 2. Guardar mensaje usuario
+    //     $this->saveMessage($chat, $text, 'user');
+
+    //     if ($chat->status === 'waiting_agent') {
+    //         // Si el usuario sigue escribiendo mientras espera
+    //         $this->sendMessage($from, "⏳ *Seguimos transfiriendo tu solicitud con urgencia.*\n\nUn agente ya fue notificado y está revisando tu historial. Por favor espera un momento, te contactarán en breve.");
+
+    //         // NO enviamos a la IA, terminamos aquí para evitar bucles.
+    //         return response()->json(['status' => 'ok']);
+    //     }
+
+    //     // 3. Consultar a la IA con el contexto del Perfil
+    //     $history = json_decode($chat->conversation_history, true) ?? [];
+    //     $aiResponse = $this->groqService->generateContextualResponse($history, $text, $profile);
+
+    //     if ($aiResponse) {
+    //         // A. Procesar etiquetas de Actualización de Perfil (La IA aprendió algo nuevo)
+    //         $this->handleProfileUpdates($profile, $aiResponse);
+
+    //         // B. Procesar etiquetas de Multimedia (La IA quiere enviar un video)
+    //         $aiResponse = $this->handleMediaTags($from, $aiResponse);
+
+    //         // C. Procesar notificaciones de Soporte (Cliente identificado completamente)
+    //         if (str_contains($aiResponse, '[ACTION: NOTIFY_SUPPORT]')) {
+    //             $this->notifyHumanAgent($profile, $text);
+    //             $aiResponse = str_replace('[ACTION: NOTIFY_SUPPORT]', '', $aiResponse);
+    //         }
+
+    //         // D. Limpiar etiquetas técnicas antes de enviar al usuario
+    //         $cleanText = preg_replace('/\[UPDATE_PROFILE:.*?\]/', '', $aiResponse);
+
+    //         if (! empty(trim($cleanText))) {
+    //             $this->sendMessage($from, $cleanText);
+    //         }
+    //     }
+
+    //     return response()->json(['status' => 'ok']);
+    // }
+
     public function receive(Request $request)
-    {
-        // ... (Validación inicial estándar de WhatsApp) ...
-        $entry = $request->input('entry.0.changes.0.value');
-        if (empty($entry['messages'])) {
-            return response()->json(['status' => 'ignored']);
-        }
-        $messageData = $entry['messages'][0];
-        $from = $messageData['from'];
-        $text = $messageData['text']['body'] ?? '';
+{
+    $entry = $request->input('entry.0.changes.0.value');
 
-        // 1. Obtener Chat y PERFIL
-        $chat = Chat::firstOrCreate(['user_number' => $from]);
-        $profile = LeadProfile::firstOrCreate(['user_number' => $from]);
+    if (empty($entry['messages'])) {
+        return response()->json(['status' => 'ignored']);
+    }
 
-        // 2. Guardar mensaje usuario
-        $this->saveMessage($chat, $text, 'user');
+    $messageData = $entry['messages'][0];
+    $from = $messageData['from'];
+    $text = $messageData['text']['body'] ?? '';
 
-        if ($chat->status === 'waiting_agent') {
-            // Si el usuario sigue escribiendo mientras espera
-            $this->sendMessage($from, "⏳ *Seguimos transfiriendo tu solicitud con urgencia.*\n\nUn agente ya fue notificado y está revisando tu historial. Por favor espera un momento, te contactarán en breve.");
+    $chat = Chat::firstOrCreate(['user_number' => $from]);
+    $profile = LeadProfile::firstOrCreate(['user_number' => $from]);
 
-            // NO enviamos a la IA, terminamos aquí para evitar bucles.
-            return response()->json(['status' => 'ok']);
-        }
+    // Guardar mensaje del usuario
+    $this->saveMessage($chat, $text, 'user');
 
-        // 3. Consultar a la IA con el contexto del Perfil
-        $history = json_decode($chat->conversation_history, true) ?? [];
-        $aiResponse = $this->groqService->generateContextualResponse($history, $text, $profile);
-
-        if ($aiResponse) {
-            // A. Procesar etiquetas de Actualización de Perfil (La IA aprendió algo nuevo)
-            $this->handleProfileUpdates($profile, $aiResponse);
-
-            // B. Procesar etiquetas de Multimedia (La IA quiere enviar un video)
-            $aiResponse = $this->handleMediaTags($from, $aiResponse);
-
-            // C. Procesar notificaciones de Soporte (Cliente identificado completamente)
-            if (str_contains($aiResponse, '[ACTION: NOTIFY_SUPPORT]')) {
-                $this->notifyHumanAgent($profile, $text);
-                $aiResponse = str_replace('[ACTION: NOTIFY_SUPPORT]', '', $aiResponse);
-            }
-
-            // D. Limpiar etiquetas técnicas antes de enviar al usuario
-            $cleanText = preg_replace('/\[UPDATE_PROFILE:.*?\]/', '', $aiResponse);
-
-            if (! empty(trim($cleanText))) {
-                $this->sendMessage($from, $cleanText);
-            }
-        }
-
+    // Si ya está esperando humano
+    if ($chat->status === 'waiting_agent') {
+        $this->sendMessage(
+            $from,
+            "⏳ *Seguimos gestionando tu solicitud.*\nUn asesor ya fue notificado."
+        );
         return response()->json(['status' => 'ok']);
     }
 
+    // Historial
+    $history = json_decode($chat->conversation_history, true) ?? [];
+
+    // 👉 RESPUESTA IA (YA PARSEADA)
+    $result = $this->groqService->generateContextualResponse(
+        $history,
+        $text,
+        $profile
+    );
+
+    // 1️⃣ Enviar TEXTO
+    if (!empty($result['text'])) {
+        $this->sendMessage($from, $result['text']);
+    }
+
+    // 2️⃣ Ejecutar ACCIONES
+    foreach ($result['actions'] as $action) {
+        match ($action['type']) {
+            'UPDATE_PROFILE' => $profile->update($action['payload']),
+            'ACTION' => $this->handleAction($chat, $profile, $action['payload']),
+            'MEDIA' => $this->sendMedia($from, $action['payload']),
+        };
+    }
+
+    return response()->json(['status' => 'ok']);
+}
+private function handleAction(Chat $chat, LeadProfile $profile, $action)
+{
+    if ($action === 'NOTIFY_SUPPORT') {
+        $chat->update(['status' => 'waiting_agent']);
+        $this->notifyHumanAgent($profile, 'Solicitud de soporte');
+    }
+
+    if ($action === 'HUMAN_HANDOFF') {
+        $chat->update(['status' => 'waiting_agent']);
+        $this->sendMessage(
+            $profile->user_number,
+            "👤 Te contacto con un especialista en este momento."
+        );
+        $this->notifyHumanAgent($profile, 'Handoff solicitado');
+    }
+}
     // --- LÓGICA DE INTELIGENCIA ---
 
     private function handleProfileUpdates(LeadProfile $profile, string $response)
@@ -90,88 +159,120 @@ class WhatsAppController extends Controller
         }
     }
 
-    private function handleMediaTags($to, $text)
-    {
-        // Tu dominio base
-        $baseUrl = 'https://botwp.tecnologiaempresarial.mx';
+    // private function handleMediaTags($to, $text)
+    // {
+    //     // Tu dominio base
+    //     $baseUrl = 'https://botwp.tecnologiaempresarial.mx';
 
-        // Mapeo de claves de la IA -> Archivos reales en tu servidor
-        // La estructura es: $baseUrl . '/carpeta/archivo.ext'
-        $mediaLibrary = [
-            'pdf_contabilidad' => [
-                'type' => 'document',
-                'url' => $baseUrl.'/docs/XPLUS.pdf',
-                'filename' => 'Ficha_Tecnica_Contabilidad.pdf',
-            ],
-            // LA IA PIDIÓ ESTO: "video_contabilidad"
-            'video_contabilidad' => [
-                'type' => 'video',
-                'url' => $baseUrl.'/videos/XPLUS.mp4',
-                'caption' => 'Conoce Contabilidad 📊',
-            ],
-            // --- CONTPAQi Contabilidad ---
-            'video_contabilidad_intro' => [
-                'type' => 'video',
-                'url' => $baseUrl.'/videos/XPLUS.mp4', // Ejemplo: Pon aquí tu video real de contabilidad
-                'caption' => 'Conoce Contabilidad 📊',
-            ],
-            'pdf_ficha_tecnica_contabilidad' => [
-                'type' => 'document',
-                'url' => $baseUrl.'/docs/XPLUS.pdf',   // Ejemplo: Pon aquí tu PDF real
-                'filename' => 'Ficha_Tecnica_Contabilidad.pdf',
-            ],
-            'img_infografia_contabilidad' => [
-                'type' => 'image',
-                'url' => $baseUrl.'/images/XPLUS.png', // Ejemplo
-                'caption' => 'Beneficios Clave',
-            ],
+    //     // Mapeo de claves de la IA -> Archivos reales en tu servidor
+    //     // La estructura es: $baseUrl . '/carpeta/archivo.ext'
+    //     $mediaLibrary = [
+    //         'pdf_contabilidad' => [
+    //             'type' => 'document',
+    //             'url' => $baseUrl.'/docs/XPLUS.pdf',
+    //             'filename' => 'Ficha_Tecnica_Contabilidad.pdf',
+    //         ],
+    //         // LA IA PIDIÓ ESTO: "video_contabilidad"
+    //         'video_contabilidad' => [
+    //             'type' => 'video',
+    //             'url' => $baseUrl.'/videos/XPLUS.mp4',
+    //             'caption' => 'Conoce Contabilidad 📊',
+    //         ],
+    //         // --- CONTPAQi Contabilidad ---
+    //         'video_contabilidad_intro' => [
+    //             'type' => 'video',
+    //             'url' => $baseUrl.'/videos/XPLUS.mp4', // Ejemplo: Pon aquí tu video real de contabilidad
+    //             'caption' => 'Conoce Contabilidad 📊',
+    //         ],
+    //         'pdf_ficha_tecnica_contabilidad' => [
+    //             'type' => 'document',
+    //             'url' => $baseUrl.'/docs/XPLUS.pdf',   // Ejemplo: Pon aquí tu PDF real
+    //             'filename' => 'Ficha_Tecnica_Contabilidad.pdf',
+    //         ],
+    //         'img_infografia_contabilidad' => [
+    //             'type' => 'image',
+    //             'url' => $baseUrl.'/images/XPLUS.png', // Ejemplo
+    //             'caption' => 'Beneficios Clave',
+    //         ],
 
-            // --- EJEMPLOS CON TUS RUTAS XPLUS (Si XPLUS fuera un producto) ---
-            'pdf_xplus' => [
-                'type' => 'document',
-                'url' => $baseUrl.'/docs/XPLUS.pdf',
-                'filename' => 'Documentacion_XPLUS.pdf',
-            ],
-            'img_xplus' => [
-                'type' => 'image',
-                'url' => $baseUrl.'/images/XPLUS.png',
-                'caption' => 'Imagen XPLUS',
-            ],
-            'video_xplus' => [
-                'type' => 'video',
-                'url' => $baseUrl.'/videos/XPLUS.mp4',
-                'caption' => 'Video Demo XPLUS',
-            ],
-        ];
+    //         // --- EJEMPLOS CON TUS RUTAS XPLUS (Si XPLUS fuera un producto) ---
+    //         'pdf_xplus' => [
+    //             'type' => 'document',
+    //             'url' => $baseUrl.'/docs/XPLUS.pdf',
+    //             'filename' => 'Documentacion_XPLUS.pdf',
+    //         ],
+    //         'img_xplus' => [
+    //             'type' => 'image',
+    //             'url' => $baseUrl.'/images/XPLUS.png',
+    //             'caption' => 'Imagen XPLUS',
+    //         ],
+    //         'video_xplus' => [
+    //             'type' => 'video',
+    //             'url' => $baseUrl.'/videos/XPLUS.mp4',
+    //             'caption' => 'Video Demo XPLUS',
+    //         ],
+    //     ];
 
-        // Lógica de reemplazo (No cambiar)
-        preg_match_all('/\[MEDIA: (.*?)\]/', $text, $matches);
+    //     // Lógica de reemplazo (No cambiar)
+    //     preg_match_all('/\[MEDIA: (.*?)\]/', $text, $matches);
 
-        if (! empty($matches[1])) {
-            foreach ($matches[1] as $tag) {
-                if (isset($mediaLibrary[$tag])) {
-                    $media = $mediaLibrary[$tag];
+    //     if (! empty($matches[1])) {
+    //         foreach ($matches[1] as $tag) {
+    //             if (isset($mediaLibrary[$tag])) {
+    //                 $media = $mediaLibrary[$tag];
 
-                    if ($media['type'] == 'video') {
-                        $this->sendVideo($to, $media['url'], $media['caption'] ?? '');
-                    }
-                    if ($media['type'] == 'document') {
-                        $this->sendDocument($to, $media['url'], $media['filename'] ?? 'documento.pdf');
-                    }
-                    if ($media['type'] == 'image') {
-                        $this->sendImage($to, $media['url'], $media['caption'] ?? '');
-                    }
-                } else {
-                    // Log para depurar si la IA pide un archivo que no tienes mapeado
-                    \Log::warning("⚠️ La IA pidió [MEDIA: $tag] pero no existe en \$mediaLibrary");
-                }
-            }
-            // Limpiamos la etiqueta del texto final
-            $text = preg_replace('/\[MEDIA: .*?\]/', '', $text);
-        }
+    //                 if ($media['type'] == 'video') {
+    //                     $this->sendVideo($to, $media['url'], $media['caption'] ?? '');
+    //                 }
+    //                 if ($media['type'] == 'document') {
+    //                     $this->sendDocument($to, $media['url'], $media['filename'] ?? 'documento.pdf');
+    //                 }
+    //                 if ($media['type'] == 'image') {
+    //                     $this->sendImage($to, $media['url'], $media['caption'] ?? '');
+    //                 }
+    //             } else {
+    //                 // Log para depurar si la IA pide un archivo que no tienes mapeado
+    //                 \Log::warning("⚠️ La IA pidió [MEDIA: $tag] pero no existe en \$mediaLibrary");
+    //             }
+    //         }
+    //         // Limpiamos la etiqueta del texto final
+    //         $text = preg_replace('/\[MEDIA: .*?\]/', '', $text);
+    //     }
 
-        return $text;
+    //     return $text;
+    // }
+
+    private function sendMedia($to, $mediaKey)
+{
+    $baseUrl = 'https://botwp.tecnologiaempresarial.mx';
+
+    $mediaLibrary = [
+        'video_contabilidad' => [
+            'type' => 'video',
+            'url' => $baseUrl.'/videos/XPLUS.mp4',
+            'caption' => 'Conoce Contabilidad 📊',
+        ],
+        'pdf_contabilidad' => [
+            'type' => 'document',
+            'url' => $baseUrl.'/docs/XPLUS.pdf',
+            'filename' => 'Ficha_Tecnica_Contabilidad.pdf',
+        ],
+    ];
+
+    if (!isset($mediaLibrary[$mediaKey])) {
+        Log::warning("MEDIA no mapeado: $mediaKey");
+        return;
     }
+
+    $media = $mediaLibrary[$mediaKey];
+
+    match ($media['type']) {
+        'video' => $this->sendVideo($to, $media['url'], $media['caption']),
+        'document' => $this->sendDocument($to, $media['url'], $media['filename']),
+        'image' => $this->sendImage($to, $media['url'], $media['caption']),
+    };
+}
+
 
     private function notifyHumanAgent($profile, $lastMessage)
     {

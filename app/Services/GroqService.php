@@ -31,12 +31,14 @@ class GroqService
                 // Convertimos historial...
             ];
 
-            // Agregamos historial reciente (simplificado para el ejemplo)
             foreach (array_slice($history, -6) as $h) {
-                $messages[] = ['role' => $h['sender'] === 'user' ? 'user' : 'assistant', 'content' => $h['message']];
+                $messages[] = [
+                    'role' => $h['sender'] === 'user' ? 'user' : 'assistant',
+                    'content' => $h['message'],
+                ];
             }
-            $messages[] = ['role' => 'user', 'content' => $msg];
 
+            $messages[] = ['role' => 'user', 'content' => $msg];
             $response = Http::withToken($this->apiKey)->post($this->apiUrl, [
                 'model' => $this->model,
                 'messages' => $messages,
@@ -44,13 +46,44 @@ class GroqService
                 'max_tokens' => 400,
             ]);
 
-            return $response->json()['choices'][0]['message']['content'] ?? null;
+            $content = $response->json()['choices'][0]['message']['content'] ?? null;
 
+            return $this->parseResponse($content);
         } catch (\Exception $e) {
             Log::error('Groq Error', ['msg' => $e->getMessage()]);
 
             return null;
         }
+    }
+
+     private function parseResponse(string $content): array
+    {
+        // Extraer etiquetas
+        preg_match_all(
+            '/\[(UPDATE_PROFILE|ACTION|MEDIA):([^\]]+)\]/',
+            $content,
+            $matches,
+            PREG_SET_ORDER
+        );
+
+        $actions = [];
+
+        foreach ($matches as $match) {
+            $actions[] = [
+                'type' => $match[1],
+                'payload' => json_decode(trim($match[2]), true) ?? trim($match[2]),
+            ];
+        }
+
+        // Limpiar texto para WhatsApp
+        $cleanText = trim(
+            preg_replace('/\[(UPDATE_PROFILE|ACTION|MEDIA):[^\]]+\]/', '', $content)
+        );
+
+        return [
+            'text' => $cleanText,
+            'actions' => $actions,
+        ];
     }
 
     private function getCompanyKnowledgeBase($profile): string
@@ -73,9 +106,7 @@ class GroqService
            - Pregunta OBLIGATORIAMENTE: "¿Eres cliente actual de Tecnología Empresarial o es la primera vez que nos contactas?"
         
         2. Si el usuario responde que es "NUEVO" o "PRIMERA VEZ":
-           - Tu respuesta debe contener DOS COSAS:
-             A) La etiqueta `[UPDATE_PROFILE: {"type": "prospect"}]`
-             B) Y EL TEXTO DE BIENVENIDA: "🎉 ¡Bienvenido a Tecnología Empresarial!
+           - Tu respuesta debe contener`EL TEXTO DE BIENVENIDA: "🎉 ¡Bienvenido a Tecnología Empresarial!
             Somos una empresa consultora especializada en la digitalización, automatización y fortalecimiento de procesos administrativos, financieros y fiscales, mediante la integración profesional de sistemas CONTPAQi® 💻📊
 
             Nuestro enfoque va más allá del software:
@@ -126,6 +157,8 @@ class GroqService
         3. **Multimedia**: Si explicas un producto, envía el material visual correspondiente usando etiquetas `[MEDIA: nombre_archivo]`.
         === REGLAS DE ENVÍO OBLIGATORIO (IMPORTANTE) ===
         Cada vez que expliques un servicio, DEBES adjuntar su material visual al final usando la etiqueta correspondiente. NO preguntes si lo quieren, ENVÍALO.
+        SIEMPRE responde con TEXTO visible para el usuario, incluso cuando generes etiquetas.
+        NUNCA respondas solo con etiquetas.
 
         1. Si preguntan "¿Qué es CONTPAQi Contabilidad?" o piden información general:
         -> Explica brevemente y al final agrega: `[MEDIA: pdf_contabilidad]` y `[MEDIA: video_contabilidad]`.
@@ -150,9 +183,10 @@ class GroqService
 
         === BASE DE CONOCIMIENTO ===
         ¿Quiénes somos?
-        Tecnología Empresarial es una empresa ubicada en Villahermosa, Tabasco, dedicada a la consultoría tecnológica, la implementación de sistemas administrativos y contables, la digitalización de procesos y la automatización operativa mediante herramientas especializadas.
+        Tecnología Empresarial es una empresa ubicada en  Calle 2 Ote 501, Progresivo Ciudad Industrial, 86017, Villahermosa, Tabasco, dedicada a la consultoría tecnológica, la implementación de sistemas administrativos y contables, la digitalización de procesos y la automatización operativa mediante herramientas especializadas.
         Tecnología Empresarial, una organización dedicada a la digitalización de procesos administrativos, financieros y fiscales mediante la integración consultiva de sistemas CONTPAQi. Su enfoque radica en acompañar a las pequeñas y medianas empresas en su transición hacia modelos operativos más eficientes, automatizados y alineados a los nuevos criterios gubernamentales de fiscalización inteligente, materialidad y razón de negocios. En un entorno donde las regulaciones se vuelven más estrictas y la tecnología ocupa un lugar central en la evidencia operativa, la empresa adquiere un papel estratégico como facilitador de cumplimiento y optimización administrativa.
-
+        Nuestro correo electronico es ventas@tecnologiaempresarial.mx
+        
         Misión
         Garantizar a nuestros clientes la prestación de servicios con tecnología para digitalizar sus procesos administrativos, contables y fiscales para automatizar su información, buscando su crecimiento sostenido y permanencia en el mercado.
         Tecnología Empresarial como un referente especializado en digitalización administrativa y cumplimiento fiscal.
