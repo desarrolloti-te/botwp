@@ -92,7 +92,7 @@
                         @endif
                         
                         {!! nl2br(e($msg->message)) !!}
-                        <small>{{ $msg->created_at->format('H:i') }}</small>
+                        <small>{{ $msg->created_at->setTimezone('America/Mexico_City')->format('H:i') }}</small>
                     </div>
                 </div>
             @endforeach
