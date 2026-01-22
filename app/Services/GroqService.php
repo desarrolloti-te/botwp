@@ -48,14 +48,8 @@ class GroqService
 
             $content = $response->json()['choices'][0]['message']['content'] ?? null;
 
-            // return $this->parseResponse($content);
-            if (empty($content)) {
-                return [
-                    'message' => 'Gracias por tu mensaje. Te estoy conectando con un asesor técnico para ayudarte de inmediato. 👨‍💻',
-                    'actions' => ['HUMAN_HANDOFF']
-                ];
-            }
-
+            return $this->parseResponse($content);
+            
         } catch (\Exception $e) {
             Log::error('Groq Error', ['msg' => $e->getMessage()]);
 
@@ -324,6 +318,8 @@ REGLAS INTERNAS (NO MOSTRAR AL USUARIO)
 - Usa párrafos, viñetas y emojis con moderación.
 - Evita frases incompletas.
 - Al final, si aplica, incluye etiquetas internas (UPDATE_PROFILE, MEDIA, ACTION).
+- Si el usuario menciona soporte, error, falla, problema técnico o nóminas: ejecuta el MODO 4: SOPORTE A CLIENTES
+    
 
 Etiquetas permitidas (ocultas al usuario):
 [UPDATE_PROFILE: {...}]
