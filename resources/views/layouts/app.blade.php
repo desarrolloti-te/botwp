@@ -98,7 +98,7 @@
 
         <!-- Panel lateral -->
         <aside class="chat-sidebar" id="chatSidebar">
-            @include('panelChats') {{-- tu panel --}}
+            @include('agent.panelChats') {{-- tu panel --}}
         </aside>
 
         <!-- Overlay -->
