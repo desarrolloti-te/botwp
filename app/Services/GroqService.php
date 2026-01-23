@@ -58,35 +58,50 @@ class GroqService
         }
     }
 
-    private function parseResponse(string $content): array
-    {
-        // Extraer etiquetas
-        preg_match_all(
-            '/\[(UPDATE_PROFILE|ACTION|MEDIA):([^\]]+)\]/',
-            $content,
-            $matches,
-            PREG_SET_ORDER
-        );
-
-        $actions = [];
-
-        foreach ($matches as $match) {
-            $actions[] = [
-                'type' => $match[1],
-                'payload' => json_decode(trim($match[2]), true) ?? trim($match[2]),
-            ];
-        }
-
-        // Limpiar texto para WhatsApp
-        $cleanText = trim(
-            preg_replace('/\[(UPDATE_PROFILE|ACTION|MEDIA):[^\]]+\]/', '', $content)
-        );
+  private function parseResponse(?string $content): array
+{
+    if (empty($content)) {
+        \Log::warning('Groq returned empty content');
 
         return [
-            'text' => $cleanText,
-            'actions' => $actions,
+            'text' => 'Gracias por la información 😊 Un asesor especializado revisará tu caso y se pondrá en contacto contigo en breve.',
+            'actions' => [
+                [
+                    'type' => 'ACTION',
+                    'payload' => 'HUMAN_HANDOFF',
+                ],
+            ],
         ];
     }
+
+    // Extraer etiquetas
+    preg_match_all(
+        '/\[(UPDATE_PROFILE|ACTION|MEDIA):([^\]]+)\]/',
+        $content,
+        $matches,
+        PREG_SET_ORDER
+    );
+
+    $actions = [];
+
+    foreach ($matches as $match) {
+        $actions[] = [
+            'type' => $match[1],
+            'payload' => json_decode(trim($match[2]), true) ?? trim($match[2]),
+        ];
+    }
+
+    // Limpiar texto para WhatsApp
+    $cleanText = trim(
+        preg_replace('/\[(UPDATE_PROFILE|ACTION|MEDIA):[^\]]+\]/', '', $content)
+    );
+
+    return [
+        'text' => $cleanText,
+        'actions' => $actions,
+    ];
+}
+
 
     // private function getCompanyKnowledgeBase($profile): string
     // {
