@@ -68,7 +68,7 @@
         <div class="card-header bg-white d-flex align-items-center justify-content-between py-2 border-bottom">
             <div class="d-flex align-items-center">
                 <a href="{{ route('agent.chats.index') }}" class="btn btn-light btn-sm me-3 rounded-circle" title="Volver">
-                    <i class="bi bi-arrow-left">←</i>
+                    <i class="bi bi-arrow-left"></i>
                 </a>
                 <div>
                     <h6 class="mb-0 fw-bold">📞 {{ $chat->user_number }}</h6>
