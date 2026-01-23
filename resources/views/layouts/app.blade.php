@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
     <meta charset="UTF-8">
     <title>Tecnología Empresarial · Panel WhatsApp</title>
@@ -13,105 +12,65 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
 
     <style>
-        .chat-layout {
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
+        body {
+            background:#f0f2f5;
+            font-family: 'Segoe UI', system-ui, sans-serif;
         }
-
-        /* Sidebar */
-        .chat-sidebar {
-            width: 320px;
-            background: #fff;
-            border-right: 1px solid #ddd;
-            overflow-y: auto;
-            transition: transform 0.3s ease;
+        .sidebar {
+            background:#0b3c49;
+            color:white;
+            min-height:100vh;
         }
-
-        /* Chat principal */
-        .chat-main {
-            flex: 1;
-            overflow: hidden;
+        .sidebar a {
+            color:#dceff5;
+            text-decoration:none;
+            display:block;
+            padding:12px 16px;
+            border-radius:6px;
         }
-
-        /* Botón menú */
-        .menu-toggle {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            z-index: 1050;
-            background: #0d6efd;
-            color: #fff;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 6px;
+        .sidebar a:hover {
+            background:#0f4d5c;
         }
-
-        /* Overlay */
-        .sidebar-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.4);
-            z-index: 1040;
+        .brand {
+            font-weight:700;
+            font-size:18px;
+            padding:16px;
+            border-bottom:1px solid rgba(255,255,255,.1);
         }
-
-        /* MODO MÓVIL */
-        @media (max-width: 768px) {
-            .chat-layout {
-                flex-direction: column;
-            }
-
-            .chat-sidebar {
-                position: fixed;
-                top: 0;
-                left: 0;
-                height: 100vh;
-                transform: translateX(-100%);
-                z-index: 1050;
-            }
-
-            .chat-sidebar.open {
-                transform: translateX(0);
-            }
-
-            .sidebar-overlay.show {
-                display: block;
-            }
-
-            .chat-main {
-                width: 100%;
-            }
+        .content {
+            padding:20px;
         }
     </style>
 
     @yield('styles')
 </head>
-
 <body>
-    <div class="chat-layout">
 
-        <!-- Botón menú solo en móvil -->
-        <button class="menu-toggle d-md-none" id="openMenu">
-            ☰
-        </button>
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-2 sidebar">
+            <div class="brand">
+                🛡 Tecnología Empresarial
+            </div>
+            <a href="{{ route('agent.chats.index') }}">
+                <i class="bi bi-chat-dots"></i> Chats
+            </a>
+            <a href="#">
+                <i class="bi bi-graph-up"></i> Métricas
+            </a>
+            <a href="#">
+                <i class="bi bi-gear"></i> Configuración
+            </a>
+        </div>
 
-        <!-- Panel lateral -->
-        <aside class="chat-sidebar" id="chatSidebar">
-            @include('agent.panelChats') {{-- tu panel --}}
-        </aside>
-
-        <!-- Overlay -->
-        <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-        <!-- Contenido principal (chat) -->
-        <main class="chat-main">
+        <!-- Contenido -->
+        <div class="col-md-10 content">
             @yield('content')
-        </main>
-
+        </div>
     </div>
+</div>
 
-    @yield('scripts')
+@yield('scripts')
 </body>
-
 </html>
