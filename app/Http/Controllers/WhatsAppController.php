@@ -150,11 +150,7 @@ class WhatsAppController extends Controller
             if (! empty($result['text'])) {
                 $this->sendMessage($from, $result['text']);
 
-                Message::create([
-                    'chat_id' => $chat->id,
-                    'message' => $result['text'],
-                    'type' => 'bot',
-                ]);
+                
 
             }
 
