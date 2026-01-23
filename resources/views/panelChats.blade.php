@@ -11,12 +11,10 @@
         background: #f8f9fa;
         transform: translateX(5px);
     }
-    
     /* Indicadores de estado visuales */
     .status-active { border-left-color: #198754; } /* Verde */
     .status-expired { border-left-color: #6c757d; opacity: 0.8; } /* Gris */
     .status-human { border-left-color: #dc3545; background-color: #fff5f5; } /* Rojo */
-
     .badge-status { font-size: 0.75rem; padding: 4px 8px; border-radius: 12px; }
     .bg-human { background-color: #dc3545; color: white; }
     .chat-preview { font-size: 13px; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -59,7 +57,6 @@ function renderChats(chats) {
         let statusBadge = '';
         let rowClass = '';
 
-        // Definir estilos según estado
         if (chat.status === 'human_required') {
             statusBadge = '<span class="badge bg-danger">🙋‍♂️ Requiere Humano</span>';
             rowClass = 'status-human';
@@ -99,8 +96,7 @@ function loadChats() {
         .catch(err => console.error(err));
 }
 
-// Primera carga y polling
 loadChats();
-setInterval(loadChats, 10000); // Actualizar cada 10 segundos
+setInterval(loadChats, 10000);
 </script>
 @endsection
